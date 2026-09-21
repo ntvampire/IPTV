@@ -24,6 +24,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 2
 
       - name: Set up Python
@@ -50,10 +51,10 @@ jobs:
           git add index.m3u epg.xml.gz
           if git diff --staged --quiet; then
             echo "No changes in generated files, skipping commit."
-          elif git log -1 --pretty=format:'%an' | grep -q 'github-actions'; then
-            git commit --amend -m "Auto-update playlist and custom EPG"
-            git push --force-with-lease
+          elif git log -1 --pretty=format:'%an' | grep -qi 'github-actions'; then
+            git commit --amend --reset-author -m "Auto-update playlist and custom EPG"
+            git push --force-with-lease origin HEAD:main
           else
             git commit -m "Auto-update playlist and custom EPG"
-            git push
+            git push origin HEAD:main
           fi
