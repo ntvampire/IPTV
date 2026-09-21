@@ -1,0 +1,586 @@
+import gzip
+import io
+import os
+import re
+import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
+
+INPUT_FILE = "input_channels.txt"
+OUTPUT_FILE = "index.m3u"
+OUTPUT_EPG_FILE = "epg.xml.gz"
+LOGOS_DIR = "logos"
+
+# External playlist endpoints
+URL_IPTVRU = "https://smolnp.github.io/IPTVru/IPTVstable.m3u8"
+URL_LOGANET = "https://loganettv.github.io/playlists/all.m3u"
+
+# Upstream EPG sources in order of priority
+PRIMARY_EPG_URL = "https://iptvx.one/epg/epg.xml.gz"
+SECONDARY_EPG_URL = "http://epg.one/epg2.xml.gz"
+
+# GitHub Pages base URL configuration
+GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY", "ntvampire/iptv")
+REPO_OWNER, REPO_NAME = (
+    GITHUB_REPOSITORY.split("/")
+    if "/" in GITHUB_REPOSITORY
+    else ("ntvampire", "iptv")
+)
+BASE_PAGES_LOGOS_URL = f"https://{REPO_OWNER}.github.io/{REPO_NAME}/logos"
+CUSTOM_EPG_URL = f"https://{REPO_OWNER}.github.io/{REPO_NAME}/epg.xml.gz"
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "*/*",
+}
+
+IGNORED_CHANNEL_NAMES = {
+    # Original promo & info entries
+    "loganettv all",
+    "telegram - t.me/loganettv_original",
+    "telegram - @loganettv_original",
+    "loganettv",
+    "iptvru",
+    # Teleshopping / promo channels
+    "shopping live",
+    "ювелирочка",
+    "shop & show",
+    "leomax",
+    "витрина тв",
+    # Unwanted generic streams or duplicates
+    "беларусь",
+    "бст",
+    "ctv.by",
+    "крым",
+    "москва",
+    "новгород",
+    "севастополь",
+    "екатеринбург",
+    "приднестровье",
+    "mezzo",
+    "майдан",
+    "курай",
+    "матур",
+    "пинск тв",
+    "юганск",
+    "euronews",
+    "rt english",
+    "кубань",
+    "татарстан",
+    "тест",
+    "сити эдем",
+    "deutsche welle",
+    "соловьев",
+    "maidan",
+    "stingray",
+    "лдпр",
+    "инфоканал",
+}
+
+EXCLUDED_EXTERNAL_GROUPS = {
+    "релакс",
+    "медитативные",
+    "relax",
+    "религия",
+    "христианские",
+    "религиозные",
+    "православные",
+    "religion",
+    "местные",
+    "региональные",
+}
+
+CATEGORY_ORDER = [
+    "Общие",
+    "Кино и сериалы",
+    "Детские",
+    "Музыка",
+    "Развлекательные",
+    "Познавательные",
+    "Спорт",
+    "Новости",
+]
+CATEGORY_INDEX_MAP = {cat: idx for idx, cat in enumerate(CATEGORY_ORDER)}
+
+# Force-override channel groups by channel name (lowercase)
+CHANNEL_GROUP_OVERRIDES = {
+    "trace sport stars": "Спорт",
+    "trace sport stars hd": "Спорт",
+}
+
+GROUP_NORMALIZATION = {
+    "кино": "Кино и сериалы",
+    "фильмы": "Кино и сериалы",
+    "сериалы": "Кино и сериалы",
+    "cinema": "Кино и сериалы",
+    "movies": "Кино и сериалы",
+    "кино и сериалы (российские)": "Кино и сериалы",
+    "спорт": "Спорт",
+    "спортивные": "Спорт",
+    "sports": "Спорт",
+    "sport": "Спорт",
+    "музыка": "Музыка",
+    "музыкальные": "Музыка",
+    "music": "Музыка",
+    "детские": "Детские",
+    "дети": "Детские",
+    "мультфильмы": "Детские",
+    "kids": "Детские",
+    "детям": "Детские",
+    "новости": "Новости",
+    "новостные": "Новости",
+    "информационные": "Новости",
+    "news": "Новости",
+    "познавательные": "Познавательные",
+    "знания": "Познавательные",
+    "культура": "Познавательные",
+    "образовательные": "Познавательные",
+    "наука": "Познавательные",
+    "документальные": "Познавательные",
+    "discovery": "Познавательные",
+    "nature": "Познавательные",
+    "общие": "Общие",
+    "общественные": "Общие",
+    "эфирные": "Общие",
+    "федеральные": "Общие",
+    "центральные": "Общие",
+    "развлекательные": "Развлекательные",
+    "развлекательные (местные)": "Развлекательные",
+    "развлечение": "Развлекательные",
+    "юмор": "Развлекательные",
+    "хобби и увлечения": "Развлекательные",
+    "хобби": "Развлекательные",
+}
+
+
+def is_blacklisted(channel_name):
+    clean = channel_name.strip().lower()
+    return any(ignored in clean for ignored in IGNORED_CHANNEL_NAMES)
+
+
+def normalize_group(group_title):
+    if not group_title:
+        return "Общие"
+    clean = group_title.strip().lower()
+    if clean in GROUP_NORMALIZATION:
+        return GROUP_NORMALIZATION[clean]
+    base_clean = re.sub(r"[\(\[\{].*?[\)\]\}]", "", clean).strip()
+    if base_clean in GROUP_NORMALIZATION:
+        return GROUP_NORMALIZATION[base_clean]
+    return group_title.strip().capitalize()
+
+
+_CACHED_LOCAL_LOGOS = None
+
+
+def get_local_logo_files():
+    global _CACHED_LOCAL_LOGOS
+    if _CACHED_LOCAL_LOGOS is None:
+        if os.path.exists(LOGOS_DIR):
+            _CACHED_LOCAL_LOGOS = [
+                f for f in os.listdir(LOGOS_DIR) if f.lower().endswith(".png")
+            ]
+        else:
+            _CACHED_LOCAL_LOGOS = []
+    return _CACHED_LOCAL_LOGOS
+
+
+def check_stream(channel, timeout=4):
+    urls_to_test = [channel["url"]] + channel.get("backup_urls", [])
+    for u in urls_to_test:
+        try:
+            res = requests.head(u, headers=HEADERS, timeout=timeout, allow_redirects=True)
+            if res.status_code in (200, 302):
+                channel["url"] = u
+                return channel
+            with requests.get(u, headers=HEADERS, timeout=timeout, stream=True) as res:
+                if res.status_code in (200, 206):
+                    channel["url"] = u
+                    return channel
+        except Exception:
+            pass
+    return None
+
+
+def find_local_logo(channel_name, tvg_id):
+    files = get_local_logo_files()
+    if not files:
+        return ""
+
+    candidates = [
+        tvg_id.lower().strip(),
+        re.sub(r"[^\w]+", "-", channel_name.lower()).strip("-"),
+        re.sub(r"[^\w]+", "_", channel_name.lower()).strip("_"),
+        re.sub(r"[^\w]+", "", channel_name.lower()),
+        re.sub(r"[^\w]+", "-", tvg_id.lower()).strip("-"),
+        re.sub(r"[^\w]+", "_", tvg_id.lower()).strip("_"),
+    ]
+
+    for cand in candidates:
+        if not cand:
+            continue
+        for f in files:
+            name_no_ext = os.path.splitext(f)[0].lower()
+            if name_no_ext == cand:
+                return f"{BASE_PAGES_LOGOS_URL}/{f}"
+
+    for cand in candidates:
+        if not cand:
+            continue
+        for f in files:
+            name_no_ext = os.path.splitext(f)[0].lower()
+            if cand in name_no_ext:
+                return f"{BASE_PAGES_LOGOS_URL}/{f}"
+
+    return ""
+
+
+def load_manual_channels():
+    channels = []
+    if not os.path.exists(INPUT_FILE):
+        return channels
+
+    print("[*] Processing manual channels with local logos from logos/...")
+    with open(INPUT_FILE, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = [p.strip() for p in line.split("|")]
+            if len(parts) >= 3:
+                name = parts[0]
+                group = normalize_group(parts[1])
+                url = parts[2]
+                raw_tvg_id = parts[3] if len(parts) >= 4 and parts[3] else name
+
+                logo_url = find_local_logo(name, raw_tvg_id)
+
+                channels.append(
+                    {
+                        "name": name,
+                        "group": group,
+                        "url": url,
+                        "logo": logo_url or "",
+                        "tvg_id": raw_tvg_id,
+                        "is_manual": True,
+                    }
+                )
+    return channels
+
+
+def parse_m3u_stream(source_url, source_name):
+    channels = []
+    print(f"[*] Fetching external playlist: {source_name} ...")
+    try:
+        res = requests.get(source_url, headers=HEADERS, timeout=15)
+        if res.status_code != 200:
+            return channels
+
+        lines = res.text.splitlines()
+        current_meta = None
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("#EXTINF:"):
+                current_meta = line
+            elif (
+                line.startswith("http://") or line.startswith("https://")
+            ) and current_meta:
+                name = (
+                    current_meta.split(",", 1)[1].strip()
+                    if "," in current_meta
+                    else "Unknown"
+                )
+
+                if is_blacklisted(name):
+                    current_meta = None
+                    continue
+
+                group_match = re.search(
+                    r'group-title="([^"]*)"', current_meta, re.IGNORECASE
+                )
+                raw_group = group_match.group(1).strip() if group_match else "Общие"
+
+                if raw_group.lower() in EXCLUDED_EXTERNAL_GROUPS:
+                    current_meta = None
+                    continue
+
+                group = normalize_group(raw_group)
+
+                clean_name = name.strip().lower()
+                if clean_name in CHANNEL_GROUP_OVERRIDES:
+                    group = CHANNEL_GROUP_OVERRIDES[clean_name]
+
+                logo_match = re.search(
+                    r'tvg-logo="([^"]*)"', current_meta, re.IGNORECASE
+                )
+                logo = logo_match.group(1).strip() if logo_match else ""
+
+                tvg_id_match = re.search(
+                    r'tvg-id="([^"]*)"', current_meta, re.IGNORECASE
+                )
+                tvg_id = tvg_id_match.group(1).strip() if tvg_id_match else name
+
+                channels.append(
+                    {
+                        "name": name,
+                        "group": group,
+                        "url": line,
+                        "logo": logo,
+                        "tvg_id": tvg_id,
+                        "is_manual": False,
+                    }
+                )
+                current_meta = None
+    except Exception as e:
+        print(f"[-] Error parsing {source_name}: {e}")
+    return channels
+
+
+def merge_external_playlists(iptvru_list, loganet_list):
+    merged = {}
+    for ch in loganet_list:
+        key = ch["name"].strip().lower()
+        merged[key] = dict(ch)
+        merged[key]["backup_urls"] = []
+
+    for ch in iptvru_list:
+        key = ch["name"].strip().lower()
+        if key in merged:
+            loganet_url = merged[key].get("url")
+            merged[key] = dict(ch)
+            if loganet_url and loganet_url != ch["url"]:
+                merged[key]["backup_urls"] = [loganet_url]
+            else:
+                merged[key]["backup_urls"] = []
+        else:
+            merged[key] = dict(ch)
+            merged[key]["backup_urls"] = []
+
+    return list(merged.values())
+
+
+def filter_alive_channels(channels, max_workers=30):
+    print(f"[*] Checking {len(channels)} external streams for availability...")
+    alive_channels = []
+    total = len(channels)
+    done_count = 0
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_channel = {executor.submit(check_stream, ch): ch for ch in channels}
+        for future in as_completed(future_to_channel):
+            done_count += 1
+            res = future.result()
+            if res:
+                alive_channels.append(res)
+            if done_count % 50 == 0 or done_count == total:
+                print(f"  > Checked: {done_count}/{total} | Alive: {len(alive_channels)}")
+
+    return alive_channels
+
+
+def _create_empty_epg():
+    """Fallback generator to guarantee epg.xml.gz exists."""
+    root = ET.Element("tv")
+    tree = ET.ElementTree(root)
+    with gzip.open(OUTPUT_EPG_FILE, "wb") as f:
+        tree.write(f, encoding="utf-8", xml_declaration=True)
+
+
+def _download_stream(url, target_path):
+    """Downloads a gzipped stream to target file path."""
+    with requests.get(url, headers=HEADERS, stream=True, timeout=120) as r:
+        if r.status_code != 200:
+            print(f"[-] Failed to fetch {url}, HTTP {r.status_code}")
+            return False
+        with open(target_path, "wb") as f:
+            for chunk in r.iter_content(chunk_size=1024 * 512):
+                if chunk:
+                    f.write(chunk)
+    return True
+
+
+def generate_custom_epg(channels):
+    """Download and merge multiple upstream EPGs with iptvx.one priority.
+    Complies strictly with XMLTV DTD: all <channel> elements precede <programme> elements.
+    Secondary EPG programmes are only used as fallback if Primary has no programmes for the channel.
+    """
+    target_ids = set()
+    for ch in channels:
+        if ch.get("tvg_id"):
+            target_ids.add(ch["tvg_id"].strip().lower())
+        if ch.get("name"):
+            target_ids.add(ch["name"].strip().lower())
+
+    channel_elements = []
+    programme_elements = []
+    seen_channels = set()
+    channels_with_programmes = set()
+
+    sources = [
+        ("iptvx.one (Primary)", PRIMARY_EPG_URL, True),
+        ("epg.one (Secondary)", SECONDARY_EPG_URL, False),
+    ]
+
+    for source_name, source_url, is_primary in sources:
+        temp_gz = f"temp_{re.sub(r'[^a-zA-Z0-9]', '_', source_name)}.xml.gz"
+        print(f"[*] Downloading EPG stream from {source_name}: {source_url} ...")
+
+        if not _download_stream(source_url, temp_gz):
+            if os.path.exists(temp_gz):
+                os.remove(temp_gz)
+            continue
+
+        print(f"[*] Filtering and merging from {source_name}...")
+        kept_ch = 0
+        kept_prog = 0
+
+        try:
+            with gzip.open(temp_gz, "rb") as gz_in:
+                context = ET.iterparse(gz_in, events=("start", "end"))
+                _, root = next(context)
+                for event, elem in context:
+                    if event != "end":
+                        continue
+
+                    if elem.tag == "channel":
+                        ch_id = elem.get("id", "").strip()
+                        ch_id_lower = ch_id.lower()
+                        display_name_elem = elem.find("display-name")
+                        display_name = (
+                            display_name_elem.text.strip().lower()
+                            if display_name_elem is not None and display_name_elem.text
+                            else ""
+                        )
+
+                        if ch_id_lower in target_ids or display_name in target_ids:
+                            if ch_id_lower not in seen_channels:
+                                channel_elements.append(elem)
+                                seen_channels.add(ch_id_lower)
+                                kept_ch += 1
+                            else:
+                                elem.clear()
+                        else:
+                            elem.clear()
+
+                    elif elem.tag == "programme":
+                        prog_ch = elem.get("channel", "").strip()
+                        prog_ch_lower = prog_ch.lower()
+
+                        if prog_ch_lower in seen_channels or prog_ch_lower in target_ids:
+                            if is_primary:
+                                programme_elements.append(elem)
+                                channels_with_programmes.add(prog_ch_lower)
+                                kept_prog += 1
+                            else:
+                                # Fallback: only include programmes if Primary had none for this channel
+                                if prog_ch_lower not in channels_with_programmes:
+                                    programme_elements.append(elem)
+                                    kept_prog += 1
+                                else:
+                                    elem.clear()
+                        else:
+                            elem.clear()
+
+                    root.clear()
+
+            print(
+                f"[+] {source_name}: added {kept_ch} new channels and {kept_prog} programmes."
+            )
+
+        except Exception as e:
+            print(f"[-] Parsing error for {source_name}: {e}")
+        finally:
+            if os.path.exists(temp_gz):
+                os.remove(temp_gz)
+
+    if channel_elements or programme_elements:
+        new_root = ET.Element("tv", {"generator-info-name": "Custom Merged IPTV EPG"})
+        # XMLTV DTD requires all channels before programmes: <!ELEMENT tv (channel*, programme*)>
+        for ch_elem in channel_elements:
+            new_root.append(ch_elem)
+        for prog_elem in programme_elements:
+            new_root.append(prog_elem)
+
+        tree = ET.ElementTree(new_root)
+        with gzip.open(OUTPUT_EPG_FILE, "wb") as f_out:
+            tree.write(f_out, encoding="utf-8", xml_declaration=True)
+        print(
+            f"[+] Successfully generated merged {OUTPUT_EPG_FILE} ({os.path.getsize(OUTPUT_EPG_FILE) // 1024} KB)"
+        )
+    else:
+        _create_empty_epg()
+
+
+def main():
+    manual_channels = load_manual_channels()
+
+    iptvru_channels = parse_m3u_stream(URL_IPTVRU, "IPTVru")
+    loganet_channels = parse_m3u_stream(URL_LOGANET, "LoganetX")
+    external_channels = merge_external_playlists(iptvru_channels, loganet_channels)
+
+    manual_keys = {ch["name"].strip().lower() for ch in manual_channels}
+    filtered_external = [
+        ch
+        for ch in external_channels
+        if ch["name"].strip().lower() not in manual_keys
+    ]
+
+    print(f"[*] Verifying manual streams ({len(manual_channels)} channels)...")
+    alive_manual = []
+    for ch in manual_channels:
+        res = check_stream(ch, timeout=8)
+        if not res:
+            res = check_stream(ch, timeout=8)
+        if res:
+            alive_manual.append(res)
+        else:
+            print(f"[!] Warning: manual channel '{ch['name']}' not responding, keeping in playlist anyway.")
+            alive_manual.append(ch)
+
+    alive_external = filter_alive_channels(filtered_external, max_workers=30)
+
+    final_list = alive_manual + alive_external
+
+    if not final_list:
+        print("[-] Error: no playable streams found.")
+        return
+
+    # Sort channels by category order first, then alphabetically by name within each category
+    def channel_sort_key(channel):
+        group_idx = CATEGORY_INDEX_MAP.get(channel["group"], len(CATEGORY_ORDER))
+        channel_name = channel["name"].strip().lower()
+        return (group_idx, channel_name)
+
+    final_list.sort(key=channel_sort_key)
+
+    generate_custom_epg(final_list)
+
+    content = [f'#EXTM3U x-tvg-url="{CUSTOM_EPG_URL}"\n']
+    for ch in final_list:
+        tvg_id = ch["tvg_id"] or ch["name"]
+        logo = ch.get("logo", "")
+        group = ch["group"]
+        name = ch["name"]
+        url = ch["url"]
+
+        if logo:
+            extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}",{name}\n{url}\n'
+        else:
+            extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" group-title="{group}",{name}\n{url}\n'
+
+        content.append(extinf)
+
+    with open(OUTPUT_FILE, "w", encoding="utf-8") as out:
+        out.write("\n".join(content))
+
+    print(f"\n[+] Generation completed successfully!")
+    print(f"    - Playlist URL : https://{REPO_OWNER}.github.io/{REPO_NAME}/{OUTPUT_FILE}")
+    print(f"    - Custom EPG   : {CUSTOM_EPG_URL}")
+    print(f"    - Channels count: {len(final_list)}")
+
+
+if __name__ == "__main__":
+    main()
