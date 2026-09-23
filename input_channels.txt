@@ -13,3 +13,4 @@ Trace Latina | Музыка | https://amg01131-tracetv-tracelatina-glewed-vtnk7.
 # Trace Mziki | Музыка | https://channels.trace.plus/Traceprod/MZIKI_hd/index.m3u8 | trace-mziki
 # Trace Jama | Музыка | https://channels.trace.plus/Traceprod/JAMA_hd/index.m3u8 | trace-jama
 XITE Hits UK | Музыка | https://amg01243-xitenetworksint-hitsuk-samsunguk-mvovq.amagi.tv/playlist/amg01243-xitenetworksint-hitsuk-samsunguk/playlist.m3u8 | xite-hits
+Afrobeats UK | Музыка | https://stream.ecable.tv/afrobeats/index.m3u8 | afrobeats-uk
