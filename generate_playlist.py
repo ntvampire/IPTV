@@ -6,14 +6,12 @@ import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests
 
-INPUT_FILE = "input_channels.txt"
+INPUT_CHANNELS_FILE = "input_channels.txt"
+INPUT_LISTS_FILE = "input_lists.txt"
+INPUT_FILE = INPUT_CHANNELS_FILE  # Backwards compatibility
 OUTPUT_FILE = "index.m3u"
 OUTPUT_EPG_FILE = "epg.xml.gz"
 LOGOS_DIR = "logos"
-
-# External playlist endpoints
-URL_IPTVRU = "https://smolnp.github.io/IPTVru/IPTVstable.m3u8"
-URL_LOGANET = "https://loganettv.github.io/playlists/all.m3u"
 
 # Upstream EPG sources in order of priority
 PRIMARY_EPG_URL = "https://iptvx.one/epg/epg.xml.gz"
@@ -339,25 +337,51 @@ def parse_m3u_stream(source_url, source_name):
     return channels
 
 
-def merge_external_playlists(iptvru_list, loganet_list):
-    merged = {}
-    for ch in loganet_list:
-        key = ch["name"].strip().lower()
-        merged[key] = dict(ch)
-        merged[key]["backup_urls"] = []
+def load_external_playlist_sources():
+    sources = []
+    if not os.path.exists(INPUT_LISTS_FILE):
+        print(f"[!] Warning: {INPUT_LISTS_FILE} not found. Skipping external playlists.")
+        return sources
 
-    for ch in iptvru_list:
-        key = ch["name"].strip().lower()
-        if key in merged:
-            loganet_url = merged[key].get("url")
-            merged[key] = dict(ch)
-            if loganet_url and loganet_url != ch["url"]:
-                merged[key]["backup_urls"] = [loganet_url]
+    print(f"[*] Loading external playlist sources from {INPUT_LISTS_FILE}...")
+    with open(INPUT_LISTS_FILE, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = [p.strip() for p in line.split("|")]
+            if len(parts) >= 2:
+                name = parts[0]
+                url = parts[1]
             else:
+                url = parts[0]
+                name = url.split("/")[-1].split("?")[0] or "External"
+            sources.append((name, url))
+    return sources
+
+
+def merge_external_playlists(playlist_sources):
+    """
+    Merges channels from multiple external playlists in priority order.
+    playlist_sources: list of (source_name, channels_list)
+    The earlier a playlist is in playlist_sources, the higher its priority.
+    Subsequent playlists provide backup URLs and additional unique channels.
+    """
+    merged = {}
+    for source_name, channels in playlist_sources:
+        for ch in channels:
+            key = ch["name"].strip().lower()
+            if key not in merged:
+                merged[key] = dict(ch)
                 merged[key]["backup_urls"] = []
-        else:
-            merged[key] = dict(ch)
-            merged[key]["backup_urls"] = []
+            else:
+                backup_url = ch.get("url")
+                if (
+                    backup_url
+                    and backup_url != merged[key]["url"]
+                    and backup_url not in merged[key]["backup_urls"]
+                ):
+                    merged[key]["backup_urls"].append(backup_url)
 
     return list(merged.values())
 
@@ -517,9 +541,14 @@ def generate_custom_epg(channels):
 def main():
     manual_channels = load_manual_channels()
 
-    iptvru_channels = parse_m3u_stream(URL_IPTVRU, "IPTVru")
-    loganet_channels = parse_m3u_stream(URL_LOGANET, "LoganetX")
-    external_channels = merge_external_playlists(iptvru_channels, loganet_channels)
+    external_sources = load_external_playlist_sources()
+    all_external_lists = []
+    for source_name, source_url in external_sources:
+        channels = parse_m3u_stream(source_url, source_name)
+        if channels:
+            all_external_lists.append((source_name, channels))
+
+    external_channels = merge_external_playlists(all_external_lists)
 
     manual_keys = {ch["name"].strip().lower() for ch in manual_channels}
     filtered_external = [

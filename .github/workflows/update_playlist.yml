@@ -10,6 +10,7 @@ on:
     paths:
       - "generate_playlist.py"
       - "input_channels.txt"
+      - "input_lists.txt"
       - "logos/**"
       - ".github/workflows/update_playlist.yml"
 
