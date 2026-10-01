@@ -1,0 +1,19 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Temporary and local test files
+*.tmp
+temp_epg_*.xml.gz
+
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Editor and IDE configurations
+.vscode/
+.idea/
+*.swp
+*.swo
