@@ -1,5 +1,7 @@
 # 📺 IPTV Playlist & EPG
 
+[![Update IPTV Playlist and EPG](https://github.com/ntvampire/IPTV/actions/workflows/update_playlist.yml/badge.svg?branch=main)](https://github.com/ntvampire/IPTV/actions/workflows/update_playlist.yml)
+
 Персональный самообновляемый IPTV-плейлист с отборными музыкальными каналами (семейство Trace, XITE, Afrobeats) и популярными телеканалами, объединенными с актуальной программой передач (EPG) и качественными логотипами.
 
 ---
