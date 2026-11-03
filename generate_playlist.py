@@ -185,15 +185,25 @@ def get_local_logo_files():
 
 def check_stream(channel, timeout=4):
     urls_to_test = [channel["url"]] + channel.get("backup_urls", [])
+    url_vlc_opts = channel.get("url_vlc_opts", {})
     for u in urls_to_test:
+        opts = url_vlc_opts.get(u, channel.get("vlc_opts", []))
+        req_headers = dict(HEADERS)
+        for opt in opts:
+            if "http-user-agent=" in opt:
+                req_headers["User-Agent"] = opt.split("http-user-agent=", 1)[1].strip()
+            elif "http-referrer=" in opt:
+                req_headers["Referer"] = opt.split("http-referrer=", 1)[1].strip()
         try:
-            res = requests.head(u, headers=HEADERS, timeout=timeout, allow_redirects=True)
+            res = requests.head(u, headers=req_headers, timeout=timeout, allow_redirects=True)
             if res.status_code in (200, 302):
                 channel["url"] = u
+                channel["vlc_opts"] = opts
                 return channel
-            with requests.get(u, headers=HEADERS, timeout=timeout, stream=True) as res:
+            with requests.get(u, headers=req_headers, timeout=timeout, stream=True) as res:
                 if res.status_code in (200, 206):
                     channel["url"] = u
+                    channel["vlc_opts"] = opts
                     return channel
         except Exception:
             pass
@@ -260,6 +270,7 @@ def load_manual_channels():
                         "url": url,
                         "logo": logo_url or "",
                         "tvg_id": raw_tvg_id,
+                        "vlc_opts": [],
                         "is_manual": True,
                     }
                 )
@@ -276,6 +287,7 @@ def parse_m3u_stream(source_url, source_name):
 
         lines = res.text.splitlines()
         current_meta = None
+        current_vlc_opts = []
 
         for line in lines:
             line = line.strip()
@@ -283,6 +295,9 @@ def parse_m3u_stream(source_url, source_name):
                 continue
             if line.startswith("#EXTINF:"):
                 current_meta = line
+                current_vlc_opts = []
+            elif line.startswith("#EXTVLCOPT:"):
+                current_vlc_opts.append(line)
             elif (
                 line.startswith("http://") or line.startswith("https://")
             ) and current_meta:
@@ -294,6 +309,7 @@ def parse_m3u_stream(source_url, source_name):
 
                 if is_blacklisted(name):
                     current_meta = None
+                    current_vlc_opts = []
                     continue
 
                 group_match = re.search(
@@ -303,6 +319,7 @@ def parse_m3u_stream(source_url, source_name):
 
                 if raw_group.lower() in EXCLUDED_EXTERNAL_GROUPS:
                     current_meta = None
+                    current_vlc_opts = []
                     continue
 
                 group = normalize_group(raw_group)
@@ -328,10 +345,12 @@ def parse_m3u_stream(source_url, source_name):
                         "url": line,
                         "logo": logo,
                         "tvg_id": tvg_id,
+                        "vlc_opts": list(current_vlc_opts),
                         "is_manual": False,
                     }
                 )
                 current_meta = None
+                current_vlc_opts = []
     except Exception as e:
         print(f"[-] Error parsing {source_name}: {e}")
     return channels
@@ -374,6 +393,7 @@ def merge_external_playlists(playlist_sources):
             if key not in merged:
                 merged[key] = dict(ch)
                 merged[key]["backup_urls"] = []
+                merged[key]["url_vlc_opts"] = {ch["url"]: ch.get("vlc_opts", [])}
             else:
                 backup_url = ch.get("url")
                 if (
@@ -382,6 +402,11 @@ def merge_external_playlists(playlist_sources):
                     and backup_url not in merged[key]["backup_urls"]
                 ):
                     merged[key]["backup_urls"].append(backup_url)
+                    if "url_vlc_opts" not in merged[key]:
+                        merged[key]["url_vlc_opts"] = {
+                            merged[key]["url"]: merged[key].get("vlc_opts", [])
+                        }
+                    merged[key]["url_vlc_opts"][backup_url] = ch.get("vlc_opts", [])
 
     return list(merged.values())
 
@@ -587,7 +612,7 @@ def main():
 
     generate_custom_epg(final_list)
 
-    content = [f'#EXTM3U x-tvg-url="{CUSTOM_EPG_URL}"\n']
+    content = [f'#EXTM3U x-tvg-url="{CUSTOM_EPG_URL}"']
     for ch in final_list:
         tvg_id = ch["tvg_id"] or ch["name"]
         logo = ch.get("logo", "")
@@ -596,14 +621,19 @@ def main():
         url = ch["url"]
 
         if logo:
-            extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}",{name}\n{url}\n'
+            extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}",{name}'
         else:
-            extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" group-title="{group}",{name}\n{url}\n'
+            extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" group-title="{group}",{name}'
 
-        content.append(extinf)
+        entry_lines = [extinf]
+        for opt in ch.get("vlc_opts", []):
+            entry_lines.append(opt)
+        entry_lines.append(url)
+
+        content.append("\n".join(entry_lines))
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as out:
-        out.write("\n".join(content))
+        out.write("\n\n".join(content) + "\n")
 
     print(f"\n[+] Generation completed successfully!")
     print(f"    - Playlist URL : https://{REPO_OWNER}.github.io/{REPO_NAME}/{OUTPUT_FILE}")
