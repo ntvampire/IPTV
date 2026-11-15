@@ -16,15 +16,21 @@ http://cdn-01.bonus-tv.ru:80/vmesterf/tracks-v1a1/index.m3u8
 http://tvchannelstream1.tvzvezda.ru/cdn/tvzvezda/playlist_sdhigh.m3u8
 
 #EXTINF:-1 tvg-id="zvezda" group-title="Общие",Звезда (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_ZVEZDA/variant.m3u8
 
 #EXTINF:-1 tvg-id="zvezda" group-title="Общие",Звезда HD
 https://tvchannelstream1.tvzvezda.ru/cdn/tvzvezda/playlist_hdhigh.m3u8
 
+#EXTINF:-1 tvg-id="Миллет" group-title="Общие",Миллет
+http://tv.ttk.mx:9021
+
 #EXTINF:-1 tvg-id="mir" group-title="Общие",Мир (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_MIR/variant.m3u8
 
 #EXTINF:-1 tvg-id="mir-pl7" group-title="Общие",Мир +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_MIR_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="Мир HD" group-title="Общие",Мир HD
@@ -34,30 +40,33 @@ http://hls.mirtv.cdnvideo.ru/mirtv-parampublish/mirtv_2500/playlist.m3u8
 http://cdn.ntv.ru/ntv0/tracks-v3a1/mono.m3u8
 
 #EXTINF:-1 tvg-id="ntv" group-title="Общие",НТВ (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_NTV/variant.m3u8
 
 #EXTINF:-1 tvg-id="ntv-pl7" group-title="Общие",НТВ +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_NTV_7/variant.m3u8
 
-#EXTINF:-1 tvg-id="НТВ HD" group-title="Общие",НТВ HD
-http://flussonic.linkintel.ru/ntv/index.m3u8
-
 #EXTINF:-1 tvg-id="ntk-kz" group-title="Общие",НТК
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://s97982.cdn.ngenix.net/hls/CH_R79_OTT_DV_HVSK_NTK/variant.m3u8
 
 #EXTINF:-1 tvg-id="ОТР" group-title="Общие",ОТР
 http://flussonic.mkpnet.ru/tv-22ed9087cd194d2b/video.m3u8
 
 #EXTINF:-1 tvg-id="otr" group-title="Общие",ОТР (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_OTR/variant.m3u8
 
 #EXTINF:-1 tvg-id="pervy" group-title="Общие",Первый канал
 http://flussonic.mkpnet.ru/tv-4f9598ab5f91dca4/video.m3u8
 
 #EXTINF:-1 tvg-id="pervy" group-title="Общие",Первый канал (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1  (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_1TVSD/variant.m3u8
 
 #EXTINF:-1 tvg-id="pervy-pl9" group-title="Общие",Первый канал +9 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://s14131.cdn.ngenix.net/hls/CH_R41_OTT_DV_KAM_1TV/variant.m3u8
 
 #EXTINF:-1 tvg-id="pervy" group-title="Общие",Первый канал HD
@@ -70,9 +79,11 @@ https://streaming.thestream.cyou/live/210-req_offset_28000000-req_window_0-3k_v5
 https://flussonic.mkpnet.ru/tv-a5ff8c7a86c8b951/video.m3u8
 
 #EXTINF:-1 tvg-id="5kanal-ru" group-title="Общие",Пятый канал (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_5TV/variant.m3u8
 
 #EXTINF:-1 tvg-id="5kanal-ru-pl7" group-title="Общие",Пятый канал +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_5TV_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="piaty-int" group-title="Общие",Пятый канал Int.
@@ -82,36 +93,36 @@ http://178.124.153.123:44400/5kanal
 http://185.46.16.239:8000/REN_TV
 
 #EXTINF:-1 tvg-id="rentv" group-title="Общие",Рен ТВ (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_RENTV/variant.m3u8
 
 #EXTINF:-1 tvg-id="rentv-pl7" group-title="Общие",Рен ТВ +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_RENTV_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="rossia1" group-title="Общие",Россия 1
 https://live.smotrim.ru/vgtrk/0/russia1-hd/1080p.m3u8
 
 #EXTINF:-1 tvg-id="rossia1" group-title="Общие",Россия 1 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_RUSSIA1/variant.m3u8
 
 #EXTINF:-1 tvg-id="rossia1-pl9" group-title="Общие",Россия 1 +9 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://s14131.cdn.ngenix.net/hls/CH_R41_OTT_DV_KAM_ROSSIA1/variant.m3u8
 
 #EXTINF:-1 tvg-id="rossia1" group-title="Общие",Россия 1 HD
 http://176.118.197.101/RossiyaHD/mono.m3u8
 
-#EXTINF:-1 tvg-id="tro" group-title="Общие",Союзный
-https://souzny.mediacdn.ru/cdn/souzny/playlist.m3u8
-
-#EXTINF:-1 tvg-id="tro" group-title="Общие",Союзный HD
-http://souzny.mediacdn.ru/cdn/souzny/tracks-v1a1/mono.ts.m3u8
-
-#EXTINF:-1 tvg-id="ТВ Центр" group-title="Общие",ТВ Центр
-http://194.152.35.17/tvc/index.m3u8
+#EXTINF:-1 tvg-id="Симферополь 24" group-title="Общие",Симферополь 24
+http://tv.ttk.mx:9180
 
 #EXTINF:-1 tvg-id="tvcentr" group-title="Общие",ТВ Центр (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_TVC/variant.m3u8
 
 #EXTINF:-1 tvg-id="tvcentr-pl7" group-title="Общие",ТВ Центр +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_TVC_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="ТНВ Планета" group-title="Общие",ТНВ Планета
@@ -135,17 +146,11 @@ http://flussonic.mkpnet.ru/tv-cad19a32f4a82824/video.m3u8
 #EXTINF:-1 tvg-id="Amedia Hit" group-title="Кино и сериалы",Amedia Hit
 http://flussonic.mkpnet.ru/tv-8f04998179283ee5/video.m3u8
 
-#EXTINF:-1 tvg-id="Amedia Hit HD" group-title="Кино и сериалы",Amedia Hit HD
-http://194.152.35.17/amedia-hit/index.m3u8
-
 #EXTINF:-1 tvg-id="Bollywood" group-title="Кино и сериалы",Bollywood
 https://xykt-fix.github.io/cinerama_edge01/hls/BOLLYWOOD_RU/Movie009.m3u8
 
 #EXTINF:-1 tvg-id="Bolt HD" group-title="Кино и сериалы",Bolt HD
 http://stream.mcquack.net/73/index.m3u8
-
-#EXTINF:-1 tvg-id="Cinema" group-title="Кино и сериалы",Cinema
-http://194.152.35.17/cinema/index.m3u8
 
 #EXTINF:-1 tvg-id="Cinema HD" group-title="Кино и сериалы",Cinema HD
 http://195.64.140.147:10055/55
@@ -167,6 +172,9 @@ http://195.64.140.147:10082/82
 
 #EXTINF:-1 tvg-id="Start Air HD" group-title="Кино и сериалы",Start Air HD
 http://195.64.140.147:10063/63
+
+#EXTINF:-1 tvg-id="Timeless Dizi" group-title="Кино и сериалы",Timeless Dizi
+http://tv.ttk.mx:9189
 
 #EXTINF:-1 tvg-id="viju TV1000" group-title="Кино и сериалы",viju TV1000
 http://217.11.177.56/streams/media/tv1000_720x576/index.m3u8
@@ -201,9 +209,6 @@ http://stream.mcquack.net/385/index.m3u8
 #EXTINF:-1 tvg-id="indiyskoe-kino" group-title="Кино и сериалы",Индийское кино
 http://188.113.190.12/329/mono.m3u8
 
-#EXTINF:-1 tvg-id="kino-tv" group-title="Кино и сериалы",Кино ТВ HD
-http://194.152.35.17/kino-tv/index.m3u8
-
 #EXTINF:-1 tvg-id="kinokomedia" group-title="Кино и сериалы",Кинокомедия HD
 http://stream.mcquack.net/265/index.m3u8
 
@@ -225,8 +230,8 @@ http://stream.mcquack.net/64/index.m3u8
 #EXTINF:-1 tvg-id="kinopremiera-hd" group-title="Кино и сериалы",Кинопремьера
 http://185.121.1.163:8083/Kinopremyera/index.m3u8
 
-#EXTINF:-1 tvg-id="kinopremiera-hd" group-title="Кино и сериалы",Кинопремьера HD
-http://5.188.159.128:8070/KINOPREMIERA/index.m3u8
+#EXTINF:-1 tvg-id="kinosvidanie" group-title="Кино и сериалы",Киносвидание
+http://tv.ttk.mx:9164
 
 #EXTINF:-1 tvg-id="kinosezon" group-title="Кино и сериалы",КиноСезон HD
 http://stitch.teletarget.ru/vintera/movieseason/index.m3u8
@@ -279,6 +284,9 @@ http://195.64.140.147:10074/74
 #EXTINF:-1 tvg-id="Премиальное HD" group-title="Кино и сериалы",Премиальное HD
 http://stream.mcquack.net/421/index.m3u8
 
+#EXTINF:-1 tvg-id="Ретро" group-title="Кино и сериалы",Ретро
+http://tv.ttk.mx:9032
+
 #EXTINF:-1 tvg-id="Русский бестселлер" group-title="Кино и сериалы",Русский бестселлер
 http://195.64.140.147:10075/75
 
@@ -290,6 +298,9 @@ http://185.46.16.239:8000/Russkiy_Illyuzion
 
 #EXTINF:-1 tvg-id="Русский иллюзион HD" group-title="Кино и сериалы",Русский иллюзион HD
 http://195.64.140.147:10093/93
+
+#EXTINF:-1 tvg-id="Русский роман HD" group-title="Кино и сериалы",Русский роман HD
+http://tv.ttk.mx:9085
 
 #EXTINF:-1 tvg-id="Советское кино" group-title="Кино и сериалы",Советское кино
 http://stitch.teletarget.ru/vintera/sovietmovie/index.m3u8
@@ -306,9 +317,6 @@ http://185.46.16.239:8000/Ani
 #EXTINF:-1 tvg-id="Baby Time" group-title="Детские",Baby Time
 http://178.134.1.158:8081/babytime/index.m3u8
 
-#EXTINF:-1 tvg-id="Cartoon Classics" group-title="Детские",Cartoon Classics
-http://5.188.159.128:8070/Cartoon_Network/index.m3u8
-
 #EXTINF:-1 tvg-id="CHD TV HD" group-title="Детские",CHD TV HD
 http://194.26.229.213/souzmultfilm/index.m3u8
 
@@ -324,20 +332,13 @@ http://flussonic.mkpnet.ru/tv-3848dd8604a262e0/video.m3u8
 #EXTINF:-1 tvg-id="ginger-hd" group-title="Детские",Капитан Фантастика HD
 http://stream.mcquack.net/144/index.m3u8
 
-#EXTINF:-1 tvg-id="karusel" group-title="Детские",Карусель
-http://194.152.35.17/Karusel/index.m3u8
-
 #EXTINF:-1 tvg-id="karusel" group-title="Детские",Карусель (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_KARUSEL/variant.m3u8
 
 #EXTINF:-1 tvg-id="karusel-pl7" group-title="Детские",Карусель +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_KARUSEL_7/variant.m3u8
-
-#EXTINF:-1 tvg-id="Мама" group-title="Детские",Мама
-http://flussonic.linkintel.ru/mama/index.m3u8
-
-#EXTINF:-1 tvg-id="Мульт" group-title="Детские",Мульт
-http://194.152.35.17/Mult/index.m3u8
 
 #EXTINF:-1 tvg-id="Мультиландия" group-title="Детские",Мультиландия
 http://flussonic.mkpnet.ru/tv-89530153f25733fe/video.m3u8
@@ -352,9 +353,11 @@ https://5d23269b3ec0c.streamlock.net/WEB_Smilik/Smilik.stream/playlist.m3u8
 http://tv.mediacdn.ru/live/solntse/playlist.m3u8
 
 #EXTINF:-1 tvg-id="solnce" group-title="Детские",Солнце (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_DISNEY/variant.m3u8
 
 #EXTINF:-1 tvg-id="solnce-pl7" group-title="Детские",Солнце +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_DISNEY_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="СТС Kids" group-title="Детские",СТС Kids
@@ -380,9 +383,6 @@ https://stream.ecable.tv/afrobeats/index.m3u8
 
 #EXTINF:-1 tvg-id="Bridge" group-title="Музыка",Bridge
 http://stream.mcquack.net/318/index.m3u8
-
-#EXTINF:-1 tvg-id="Bridge Classic" group-title="Музыка",Bridge Classic
-http://5.188.159.128:8070/Bridge_TV_Hits/index.m3u8
 
 #EXTINF:-1 tvg-id="Bridge Deluxe" group-title="Музыка",Bridge Deluxe
 http://5.188.159.128:8070/Bridge_TV_Deluxe/index.m3u8
@@ -460,9 +460,11 @@ http://stream.mcquack.net/386/index.m3u8
 http://stream.mcquack.net/86/index.m3u8
 
 #EXTINF:-1 tvg-id="muztv" group-title="Музыка",Муз-ТВ (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_MUZTV/variant.m3u8
 
 #EXTINF:-1 tvg-id="muztv" group-title="Музыка",Муз-ТВ +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_MUZTV_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="Музыка Первого" group-title="Музыка",Музыка Первого
@@ -478,16 +480,11 @@ http://tntm.mediacdn.ru/cdn/tntmusic/tracks-v3a1/mono.ts.m3u8
 http://176.118.197.101/2x2/index.m3u8
 
 #EXTINF:-1 tvg-id="2na2" group-title="Развлекательные",2x2 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_2X2/variant.m3u8
 
 #EXTINF:-1 tvg-id="2na2" group-title="Развлекательные",2x2 HD
 http://185.23.80.23:8080/2x2/index.m3u8
-
-#EXTINF:-1 tvg-id="Discovery" group-title="Развлекательные",Discovery
-http://5.188.159.128:8070/DiscoveryChannel/index.m3u8
-
-#EXTINF:-1 tvg-id="Fashion TV" group-title="Развлекательные",Fashion TV
-https://lbgo.bozztv.com/07/ushba93/tracks-v1a1/mono.m3u8
 
 #EXTINF:-1 tvg-id="Fashion TV HD" group-title="Развлекательные",Fashion TV HD
 http://fashionlive.mediacdn.ru/cdn/fashiontv/tracks-v1a1/mono.m3u8
@@ -543,6 +540,9 @@ http://stream.mcquack.net/78/index.m3u8
 #EXTINF:-1 tvg-id="avto-plus" group-title="Развлекательные",Авто Плюс
 http://195.64.140.147:10029/29
 
+#EXTINF:-1 tvg-id="voprosy-i-otvety" group-title="Развлекательные",Вопросы и ответы
+http://tv.ttk.mx:9038
+
 #EXTINF:-1 tvg-id="dialogi-o-rybalke" group-title="Развлекательные",Диалоги о рыбалке
 http://195.64.140.147:10117/117
 
@@ -559,13 +559,18 @@ https://stream3.cinerama.uz/1230/tracks-v1a1/mono.m3u8
 http://flussonic.mkpnet.ru/tv-b515ccce67923f8a/video.m3u8
 
 #EXTINF:-1 tvg-id="domashny" group-title="Развлекательные",Домашний (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_DOMASHNIY/variant.m3u8
 
 #EXTINF:-1 tvg-id="domashny-pl7" group-title="Развлекательные",Домашний +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_DOMASHNY_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="domashny" group-title="Развлекательные",Домашний HD
 http://stream.mcquack.net/227/index.m3u8
+
+#EXTINF:-1 tvg-id="drive" group-title="Развлекательные",Драйв
+http://tv.ttk.mx:9039
 
 #EXTINF:-1 tvg-id="zagorodnaya-zhizn" group-title="Развлекательные",Загородная жизнь
 http://185.57.68.33/40/mpegts
@@ -585,6 +590,9 @@ http://flussonic.mkpnet.ru/tv-55c94e838b306657/video.m3u8
 #EXTINF:-1 tvg-id="Наша тема" group-title="Развлекательные",Наша тема
 http://flussonic.mkpnet.ru/tv-c922a9201f5073f8/video.m3u8
 
+#EXTINF:-1 tvg-id="Наша тема HD" group-title="Развлекательные",Наша тема HD
+http://live-3.otcnet.ru/nashatema/index.m3u8
+
 #EXTINF:-1 tvg-id="НТВ-Право" group-title="Развлекательные",НТВ-Право
 http://cdn.ntv.ru/th_pravo/tracks-v1a1/mono.m3u8
 
@@ -603,28 +611,37 @@ http://195.64.140.147:10162/162
 #EXTINF:-1 tvg-id="Продвижение" group-title="Развлекательные",Продвижение
 http://origin5.mediacdn.ru/live/prodvizhenie_new/index.m3u8
 
+#EXTINF:-1 tvg-id="Пятница!" group-title="Развлекательные",Пятница!
+http://tv.ttk.mx:9015
+
 #EXTINF:-1 tvg-id="piatnica" group-title="Развлекательные",Пятница! (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_PYATNIZZA/variant.m3u8
 
 #EXTINF:-1 tvg-id="piatnica-pl7" group-title="Развлекательные",Пятница! +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_FRIDAY_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="Россия Культура" group-title="Развлекательные",Россия Культура
 http://flussonic.mkpnet.ru/tv-111deaa2142146ee/video.m3u8
 
 #EXTINF:-1 tvg-id="kultura" group-title="Развлекательные",Россия Культура (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_RUSSIAK/variant.m3u8
 
 #EXTINF:-1 tvg-id="kultura-pl7" group-title="Развлекательные",Россия Культура +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_RUSSIAK_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="Россия Культура HD" group-title="Развлекательные",Россия Культура HD
 https://live.smotrim.ru/vgtrk/0/kultura-hd/track_105_319a299f/chunklist.m3u8
 
 #EXTINF:-1 tvg-id="sts" group-title="Развлекательные",СТС (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_STS/variant.m3u8
 
 #EXTINF:-1 tvg-id="sts-pl7" group-title="Развлекательные",СТС +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_STS_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="СТС Int." group-title="Развлекательные",СТС Int.
@@ -634,45 +651,52 @@ http://178.134.1.158:8081/CTC/index.m3u8
 https://flussonic.mkpnet.ru/tv-b9f0884f9a81b8c6/video.m3u8
 
 #EXTINF:-1 tvg-id="sts-love" group-title="Развлекательные",СТС Love (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_STSLOVE/variant.m3u8
 
 #EXTINF:-1 tvg-id="sts-love-pl7" group-title="Развлекательные",СТС Love +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_STSLOVE_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="Суббота!" group-title="Развлекательные",Суббота!
 http://flussonic.mkpnet.ru/tv-2e0a7cc949958b60/video.m3u8
 
 #EXTINF:-1 tvg-id="super" group-title="Развлекательные",Суббота! (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_SUPER/variant.m3u8
 
 #EXTINF:-1 tvg-id="super-pl7" group-title="Развлекательные",Суббота! +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_SUPER_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="ТВ3" group-title="Развлекательные",ТВ3
 https://flussonic.mkpnet.ru/tv-b9ddf7deb3d25757/video.m3u8
 
 #EXTINF:-1 tvg-id="tv3-ru" group-title="Развлекательные",ТВ3 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_TV3/variant.m3u8
 
 #EXTINF:-1 tvg-id="tv3-ru-pl7" group-title="Развлекательные",ТВ3 +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_TV3_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="ТНТ" group-title="Развлекательные",ТНТ
 http://185.46.16.239:8000/TNT
 
 #EXTINF:-1 tvg-id="tnt" group-title="Развлекательные",ТНТ (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_TNT/variant.m3u8
 
 #EXTINF:-1 tvg-id="tnt-pl7" group-title="Развлекательные",ТНТ +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_TNT_7/variant.m3u8
 
-#EXTINF:-1 tvg-id="ТНТ4" group-title="Развлекательные",ТНТ4
-http://194.152.35.17/tnt4/index.m3u8
-
 #EXTINF:-1 tvg-id="tnt4" group-title="Развлекательные",ТНТ4 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_TNT4/variant.m3u8
 
 #EXTINF:-1 tvg-id="tnt4-pl7" group-title="Развлекательные",ТНТ4 +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_TNT4_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="Тонус" group-title="Развлекательные",Тонус
@@ -681,19 +705,26 @@ http://194.143.148.28:8080/Mir24/mpegts
 #EXTINF:-1 tvg-id="Точка ТВ" group-title="Развлекательные",Точка ТВ
 http://195.64.140.147:10024/24
 
+#EXTINF:-1 tvg-id="Че" group-title="Развлекательные",Че
+http://tv.ttk.mx:9141
+
 #EXTINF:-1 tvg-id="che" group-title="Развлекательные",Че! (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_PERETZ/variant.m3u8
 
 #EXTINF:-1 tvg-id="che-pl7" group-title="Развлекательные",Че! +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_PERETZ_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="Ю ТВ" group-title="Развлекательные",Ю ТВ
 http://flussonic.mkpnet.ru/tv-3b21847ece4b1c19/video.m3u8
 
 #EXTINF:-1 tvg-id="yu" group-title="Развлекательные",Ю ТВ (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_U/variant.m3u8
 
 #EXTINF:-1 tvg-id="yu-pl7" group-title="Развлекательные",Ю ТВ +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_U_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="360-podmoskovie" group-title="Познавательные",360°
@@ -750,6 +781,9 @@ http://195.64.140.147:10147/147
 #EXTINF:-1 tvg-id="viju+ Planet HD" group-title="Познавательные",viju+ Planet HD
 http://stream.mcquack.net/240/index.m3u8
 
+#EXTINF:-1 tvg-id="Zooпарк" group-title="Познавательные",Zooпарк
+http://178.134.1.158:8081/zoopark/index.m3u8
+
 #EXTINF:-1 tvg-id="akwatv" group-title="Познавательные",Аква ТВ HD
 http://stitch.teletarget.ru/vintera/aquatv/index.m3u8
 
@@ -764,6 +798,9 @@ https://live-bigasia.cdnvideo.ru/bigasia/bigasia.smil/tracks-v1a1/mono.m3u8
 
 #EXTINF:-1 tvg-id="v-mire-zhivotnyx-hd" group-title="Познавательные",В мире животных HD
 http://stream.mcquack.net/241/index.m3u8
+
+#EXTINF:-1 tvg-id="doktor" group-title="Познавательные",Доктор
+http://178.134.1.158:8081/doktor/index.m3u8
 
 #EXTINF:-1 tvg-id="doktor" group-title="Познавательные",Доктор HD
 http://stream.mcquack.net/80/index.m3u8
@@ -801,6 +838,9 @@ https://live-4.otcnet.ru/504/135/1080p/index.m3u8
 #EXTINF:-1 tvg-id="Моя планета" group-title="Познавательные",Моя планета
 http://vod.tuva.ru/myplanet/index.m3u8
 
+#EXTINF:-1 tvg-id="Моя планета HD" group-title="Познавательные",Моя планета HD
+http://tv.ttk.mx:9087
+
 #EXTINF:-1 tvg-id="Наука" group-title="Познавательные",Наука
 http://195.64.140.147:10176/176
 
@@ -836,6 +876,9 @@ https://tv-streaming.bsh.ru:21938/probusiness/probusiness.stream/chunklist.m3u8
 
 #EXTINF:-1 tvg-id="Просвещение" group-title="Познавательные",Просвещение
 https://cdn-01.bonus-tv.ru/prosveschenie_edge/index.m3u8
+
+#EXTINF:-1 tvg-id="Ратник HD" group-title="Познавательные",Ратник HD
+http://tv.ttk.mx:9106
 
 #EXTINF:-1 tvg-id="Тайны Галактики" group-title="Познавательные",Тайны Галактики
 https://livestream.galaxytv.ug/jikonkone/chunklist_w518448902.m3u8
@@ -879,14 +922,8 @@ http://195.64.140.147:10109/109
 #EXTINF:-1 tvg-id="MMA-TV" group-title="Спорт",MMA-TV
 http://195.64.140.147:10110/110
 
-#EXTINF:-1 tvg-id="Russian Extreme" group-title="Спорт",Russian Extreme
-http://85.208.223.249:8888/play/a004
-
 #EXTINF:-1 tvg-id="Udar" group-title="Спорт",Udar
 http://stream.mcquack.net/279/index.m3u8
-
-#EXTINF:-1 tvg-id="Udar HD" group-title="Спорт",Udar HD
-http://5.188.159.128:8070/udar/index.m3u8
 
 #EXTINF:-1 tvg-id="viju+ Sport" group-title="Спорт",viju+ Sport
 http://178.134.1.158:8081/viasatsport/index.m3u8
@@ -901,9 +938,11 @@ http://185.46.16.239:8000/Eurosport_1
 http://tv.tuva.ru/machtv/index.m3u8
 
 #EXTINF:-1 tvg-id="match-tv" group-title="Спорт",Матч! (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_MATCHTV/variant.m3u8
 
 #EXTINF:-1 tvg-id="match-tv" group-title="Спорт",Матч! +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 https://zabava-htlive.cdn.ngenix.net/hls/CH_MATCHTV_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="match-tv" group-title="Спорт",Матч! HD
@@ -991,9 +1030,11 @@ http://176.118.197.101/RBK/index.m3u8
 https://stream.smotrim.ru/hls2/russia_24/playlist_3.m3u8
 
 #EXTINF:-1 tvg-id="rossia-24" group-title="Новости",Россия 24 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_RUSSIA24/variant.m3u8
 
 #EXTINF:-1 tvg-id="rossia-24-pl7" group-title="Новости",Россия 24 +7 (Архив)
+#EXTVLCOPT:http-user-agent=WINK/1.40.1 (AndroidTV/9) HlsWinkPlayer
 http://zabava-htlive.cdn.ngenix.net/hls/CH_RUSSIA24_7/variant.m3u8
 
 #EXTINF:-1 tvg-id="Россия 24 HD" group-title="Новости",Россия 24 HD
