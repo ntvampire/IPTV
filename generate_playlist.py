@@ -1,5 +1,6 @@
 import gzip
 import io
+import json
 import os
 import re
 import xml.etree.ElementTree as ET
@@ -186,9 +187,11 @@ def get_local_logo_files():
 def check_stream(channel, timeout=4):
     urls_to_test = [channel["url"]] + channel.get("backup_urls", [])
     url_vlc_opts = channel.get("url_vlc_opts", {})
+    url_http_opts = channel.get("url_http_opts", {})
     url_catchup_attrs = channel.get("url_catchup_attrs", {})
     for u in urls_to_test:
         opts = url_vlc_opts.get(u, channel.get("vlc_opts", []))
+        h_opts = url_http_opts.get(u, channel.get("http_opts", []))
         c_attrs = url_catchup_attrs.get(u, channel.get("catchup_attrs", {}))
         req_headers = dict(HEADERS)
         for opt in opts:
@@ -196,17 +199,26 @@ def check_stream(channel, timeout=4):
                 req_headers["User-Agent"] = opt.split("http-user-agent=", 1)[1].strip()
             elif "http-referrer=" in opt:
                 req_headers["Referer"] = opt.split("http-referrer=", 1)[1].strip()
+        for opt in h_opts:
+            if opt.startswith("#EXTHTTP:"):
+                try:
+                    h_json = json.loads(opt.split("#EXTHTTP:", 1)[1].strip())
+                    req_headers.update(h_json)
+                except Exception:
+                    pass
         try:
             res = requests.head(u, headers=req_headers, timeout=timeout, allow_redirects=True)
             if res.status_code in (200, 302):
                 channel["url"] = u
                 channel["vlc_opts"] = opts
+                channel["http_opts"] = h_opts
                 channel["catchup_attrs"] = c_attrs
                 return channel
             with requests.get(u, headers=req_headers, timeout=timeout, stream=True) as res:
                 if res.status_code in (200, 206):
                     channel["url"] = u
                     channel["vlc_opts"] = opts
+                    channel["http_opts"] = h_opts
                     channel["catchup_attrs"] = c_attrs
                     return channel
         except Exception:
@@ -274,7 +286,9 @@ def load_manual_channels():
                         "url": url,
                         "logo": logo_url or "",
                         "tvg_id": raw_tvg_id,
+                        "audio_track": "",
                         "vlc_opts": [],
+                        "http_opts": [],
                         "catchup_attrs": {},
                         "is_manual": True,
                     }
@@ -293,6 +307,7 @@ def parse_m3u_stream(source_url, source_name):
         lines = res.text.splitlines()
         current_meta = None
         current_vlc_opts = []
+        current_http_opts = []
 
         for line in lines:
             line = line.strip()
@@ -301,8 +316,11 @@ def parse_m3u_stream(source_url, source_name):
             if line.startswith("#EXTINF:"):
                 current_meta = line
                 current_vlc_opts = []
+                current_http_opts = []
             elif line.startswith("#EXTVLCOPT:"):
                 current_vlc_opts.append(line)
+            elif line.startswith("#EXTHTTP:"):
+                current_http_opts.append(line)
             elif (
                 line.startswith("http://") or line.startswith("https://")
             ) and current_meta:
@@ -315,6 +333,7 @@ def parse_m3u_stream(source_url, source_name):
                 if is_blacklisted(name):
                     current_meta = None
                     current_vlc_opts = []
+                    current_http_opts = []
                     continue
 
                 group_match = re.search(
@@ -325,6 +344,7 @@ def parse_m3u_stream(source_url, source_name):
                 if raw_group.lower() in EXCLUDED_EXTERNAL_GROUPS:
                     current_meta = None
                     current_vlc_opts = []
+                    current_http_opts = []
                     continue
 
                 group = normalize_group(raw_group)
@@ -342,6 +362,14 @@ def parse_m3u_stream(source_url, source_name):
                     r'tvg-id="([^"]*)"', current_meta, re.IGNORECASE
                 )
                 tvg_id = tvg_id_match.group(1).strip() if tvg_id_match else name
+
+                # Extract audio-track
+                audio_track_match = re.search(
+                    r'audio-track="([^"]*)"', current_meta, re.IGNORECASE
+                )
+                audio_track = (
+                    audio_track_match.group(1).strip() if audio_track_match else ""
+                )
 
                 # Extract catchup/archive-related attributes
                 catchup_attrs = {}
@@ -365,13 +393,16 @@ def parse_m3u_stream(source_url, source_name):
                         "url": line,
                         "logo": logo,
                         "tvg_id": tvg_id,
+                        "audio_track": audio_track,
                         "vlc_opts": list(current_vlc_opts),
+                        "http_opts": list(current_http_opts),
                         "catchup_attrs": dict(catchup_attrs),
                         "is_manual": False,
                     }
                 )
                 current_meta = None
                 current_vlc_opts = []
+                current_http_opts = []
     except Exception as e:
         print(f"[-] Error parsing {source_name}: {e}")
     return channels
@@ -415,6 +446,7 @@ def merge_external_playlists(playlist_sources):
                 merged[key] = dict(ch)
                 merged[key]["backup_urls"] = []
                 merged[key]["url_vlc_opts"] = {ch["url"]: ch.get("vlc_opts", [])}
+                merged[key]["url_http_opts"] = {ch["url"]: ch.get("http_opts", [])}
                 merged[key]["url_catchup_attrs"] = {
                     ch["url"]: ch.get("catchup_attrs", {})
                 }
@@ -431,6 +463,11 @@ def merge_external_playlists(playlist_sources):
                             merged[key]["url"]: merged[key].get("vlc_opts", [])
                         }
                     merged[key]["url_vlc_opts"][backup_url] = ch.get("vlc_opts", [])
+                    if "url_http_opts" not in merged[key]:
+                        merged[key]["url_http_opts"] = {
+                            merged[key]["url"]: merged[key].get("http_opts", [])
+                        }
+                    merged[key]["url_http_opts"][backup_url] = ch.get("http_opts", [])
                     if "url_catchup_attrs" not in merged[key]:
                         merged[key]["url_catchup_attrs"] = {
                             merged[key]["url"]: merged[key].get("catchup_attrs", {})
@@ -438,6 +475,9 @@ def merge_external_playlists(playlist_sources):
                     merged[key]["url_catchup_attrs"][backup_url] = ch.get(
                         "catchup_attrs", {}
                     )
+                # Inherit audio_track if primary channel was missing it
+                if not merged[key].get("audio_track") and ch.get("audio_track"):
+                    merged[key]["audio_track"] = ch["audio_track"]
 
     return list(merged.values())
 
@@ -492,12 +532,18 @@ def generate_custom_epg(channels):
         if ch.get("tvg_id"):
             target_ids.add(ch["tvg_id"].strip().lower())
         if ch.get("name"):
-            target_ids.add(ch["name"].strip().lower())
+            name_raw = ch["name"].strip().lower()
+            target_ids.add(name_raw)
+            name_clean = re.sub(r"\s*\(архив\)\s*", "", name_raw).strip()
+            target_ids.add(name_clean)
+            name_no_hd = re.sub(r"\s+(hd|fhd|4k|sd)$", "", name_clean).strip()
+            target_ids.add(name_no_hd)
 
     channel_elements = []
     programme_elements = []
     seen_channels = set()
     channels_with_programmes = set()
+    epg_name_to_id = {}
 
     sources = [
         ("iptvx.one (Primary)", PRIMARY_EPG_URL, True),
@@ -534,12 +580,25 @@ def generate_custom_epg(channels):
                             if display_name_elem is not None and display_name_elem.text
                             else ""
                         )
+                        disp_clean = re.sub(r"\s*\(архив\)\s*", "", display_name).strip()
+                        disp_no_hd = re.sub(r"\s+(hd|fhd|4k|sd)$", "", disp_clean).strip()
 
-                        if ch_id_lower in target_ids or display_name in target_ids:
+                        if (
+                            ch_id_lower in target_ids
+                            or display_name in target_ids
+                            or disp_clean in target_ids
+                            or disp_no_hd in target_ids
+                        ):
                             if ch_id_lower not in seen_channels:
                                 channel_elements.append(elem)
                                 seen_channels.add(ch_id_lower)
                                 kept_ch += 1
+                                if display_name and display_name not in epg_name_to_id:
+                                    epg_name_to_id[display_name] = ch_id
+                                if disp_clean and disp_clean not in epg_name_to_id:
+                                    epg_name_to_id[disp_clean] = ch_id
+                                if disp_no_hd and disp_no_hd not in epg_name_to_id:
+                                    epg_name_to_id[disp_no_hd] = ch_id
                             else:
                                 elem.clear()
                         else:
@@ -575,6 +634,31 @@ def generate_custom_epg(channels):
         finally:
             if os.path.exists(temp_gz):
                 os.remove(temp_gz)
+
+    # Auto-resolve canonical tvg_id for channels without upstream IDs
+    resolved_count = 0
+    for ch in channels:
+        current_id = (ch.get("tvg_id") or "").strip()
+        current_id_lower = current_id.lower()
+        if current_id_lower in channels_with_programmes:
+            continue
+
+        name_raw = ch["name"].strip().lower()
+        name_clean = re.sub(r"\s*\(архив\)\s*", "", name_raw).strip()
+        name_no_hd = re.sub(r"\s+(hd|fhd|4k|sd)$", "", name_clean).strip()
+
+        for cand in (name_raw, name_clean, name_no_hd):
+            if cand in epg_name_to_id:
+                candidate_id = epg_name_to_id[cand]
+                if candidate_id.lower() in channels_with_programmes:
+                    ch["tvg_id"] = candidate_id
+                    resolved_count += 1
+                    break
+
+    if resolved_count:
+        print(
+            f"[+] Auto-resolved canonical tvg-id for {resolved_count} channels from EPG."
+        )
 
     if channel_elements or programme_elements:
         new_root = ET.Element("tv", {"generator-info-name": "Custom Merged IPTV EPG"})
@@ -617,6 +701,35 @@ def format_catchup_attrs(catchup_attrs):
         if key not in seen:
             parts.append(f'{key}="{val}"')
     return " " + " ".join(parts) if parts else ""
+
+
+def format_channel_headers(vlc_opts, http_opts=None):
+    """
+    Returns unified header directive lines for a stream.
+    Emits both #EXTVLCOPT and #EXTHTTP for maximum compatibility across players:
+    - VLC / Televizo use #EXTVLCOPT
+    - Pult (iOS/Apple TV/AVPlayer) / OTT Navigator use #EXTHTTP
+    """
+    lines = []
+    headers_dict = {}
+
+    for opt in (vlc_opts or []):
+        lines.append(opt)
+        if "http-user-agent=" in opt:
+            headers_dict["User-Agent"] = opt.split("http-user-agent=", 1)[1].strip()
+        elif "http-referrer=" in opt:
+            headers_dict["Referer"] = opt.split("http-referrer=", 1)[1].strip()
+
+    if http_opts:
+        for opt in http_opts:
+            if opt not in lines:
+                lines.append(opt)
+    elif headers_dict:
+        http_line = f"#EXTHTTP:{json.dumps(headers_dict, ensure_ascii=False)}"
+        if http_line not in lines:
+            lines.append(http_line)
+
+    return lines
 
 
 def main():
@@ -668,22 +781,27 @@ def main():
 
     generate_custom_epg(final_list)
 
-    content = [f'#EXTM3U x-tvg-url="{CUSTOM_EPG_URL}"']
+    content = [f'#EXTM3U url-tvg="{CUSTOM_EPG_URL}" x-tvg-url="{CUSTOM_EPG_URL}"']
     for ch in final_list:
-        tvg_id = ch["tvg_id"] or ch["name"]
+        tvg_id = ch.get("tvg_id") or ch["name"]
+        tvg_name = ch["name"]
         logo = ch.get("logo", "")
         group = ch["group"]
         name = ch["name"]
         url = ch["url"]
+        audio_track = ch.get("audio_track", "")
+        audio_track_str = f' audio-track="{audio_track}"' if audio_track else ""
         catchup_str = format_catchup_attrs(ch.get("catchup_attrs", {}))
 
         if logo:
-            extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}"{catchup_str},{name}'
+            extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-name="{tvg_name}" tvg-logo="{logo}" group-title="{group}"{audio_track_str}{catchup_str},{name}'
         else:
-            extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" group-title="{group}"{catchup_str},{name}'
+            extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-name="{tvg_name}" group-title="{group}"{audio_track_str}{catchup_str},{name}'
 
         entry_lines = [extinf]
-        for opt in ch.get("vlc_opts", []):
+        for opt in format_channel_headers(
+            ch.get("vlc_opts", []), ch.get("http_opts", [])
+        ):
             entry_lines.append(opt)
         entry_lines.append(url)
 
