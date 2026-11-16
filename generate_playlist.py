@@ -186,8 +186,10 @@ def get_local_logo_files():
 def check_stream(channel, timeout=4):
     urls_to_test = [channel["url"]] + channel.get("backup_urls", [])
     url_vlc_opts = channel.get("url_vlc_opts", {})
+    url_catchup_attrs = channel.get("url_catchup_attrs", {})
     for u in urls_to_test:
         opts = url_vlc_opts.get(u, channel.get("vlc_opts", []))
+        c_attrs = url_catchup_attrs.get(u, channel.get("catchup_attrs", {}))
         req_headers = dict(HEADERS)
         for opt in opts:
             if "http-user-agent=" in opt:
@@ -199,11 +201,13 @@ def check_stream(channel, timeout=4):
             if res.status_code in (200, 302):
                 channel["url"] = u
                 channel["vlc_opts"] = opts
+                channel["catchup_attrs"] = c_attrs
                 return channel
             with requests.get(u, headers=req_headers, timeout=timeout, stream=True) as res:
                 if res.status_code in (200, 206):
                     channel["url"] = u
                     channel["vlc_opts"] = opts
+                    channel["catchup_attrs"] = c_attrs
                     return channel
         except Exception:
             pass
@@ -271,6 +275,7 @@ def load_manual_channels():
                         "logo": logo_url or "",
                         "tvg_id": raw_tvg_id,
                         "vlc_opts": [],
+                        "catchup_attrs": {},
                         "is_manual": True,
                     }
                 )
@@ -338,6 +343,21 @@ def parse_m3u_stream(source_url, source_name):
                 )
                 tvg_id = tvg_id_match.group(1).strip() if tvg_id_match else name
 
+                # Extract catchup/archive-related attributes
+                catchup_attrs = {}
+                for m in re.finditer(
+                    r'([a-zA-Z0-9_\-]+)=(?:"([^"]*)"|\'([^\']*)\'|([^\s,]+))',
+                    current_meta,
+                ):
+                    attr_name = m.group(1).lower()
+                    attr_val = m.group(2) or m.group(3) or m.group(4) or ""
+                    if (
+                        attr_name.startswith("catchup")
+                        or attr_name.startswith("arc-")
+                        or "timeshift" in attr_name
+                    ):
+                        catchup_attrs[attr_name] = attr_val
+
                 channels.append(
                     {
                         "name": name,
@@ -346,6 +366,7 @@ def parse_m3u_stream(source_url, source_name):
                         "logo": logo,
                         "tvg_id": tvg_id,
                         "vlc_opts": list(current_vlc_opts),
+                        "catchup_attrs": dict(catchup_attrs),
                         "is_manual": False,
                     }
                 )
@@ -394,6 +415,9 @@ def merge_external_playlists(playlist_sources):
                 merged[key] = dict(ch)
                 merged[key]["backup_urls"] = []
                 merged[key]["url_vlc_opts"] = {ch["url"]: ch.get("vlc_opts", [])}
+                merged[key]["url_catchup_attrs"] = {
+                    ch["url"]: ch.get("catchup_attrs", {})
+                }
             else:
                 backup_url = ch.get("url")
                 if (
@@ -407,6 +431,13 @@ def merge_external_playlists(playlist_sources):
                             merged[key]["url"]: merged[key].get("vlc_opts", [])
                         }
                     merged[key]["url_vlc_opts"][backup_url] = ch.get("vlc_opts", [])
+                    if "url_catchup_attrs" not in merged[key]:
+                        merged[key]["url_catchup_attrs"] = {
+                            merged[key]["url"]: merged[key].get("catchup_attrs", {})
+                        }
+                    merged[key]["url_catchup_attrs"][backup_url] = ch.get(
+                        "catchup_attrs", {}
+                    )
 
     return list(merged.values())
 
@@ -563,6 +594,31 @@ def generate_custom_epg(channels):
         _create_empty_epg()
 
 
+def format_catchup_attrs(catchup_attrs):
+    if not catchup_attrs:
+        return ""
+    preferred_order = [
+        "catchup",
+        "catchup-days",
+        "catchup-source",
+        "catchup-type",
+        "catchup-time",
+        "timeshift",
+        "arc-type",
+        "arc-time",
+    ]
+    parts = []
+    seen = set()
+    for key in preferred_order:
+        if key in catchup_attrs:
+            parts.append(f'{key}="{catchup_attrs[key]}"')
+            seen.add(key)
+    for key, val in catchup_attrs.items():
+        if key not in seen:
+            parts.append(f'{key}="{val}"')
+    return " " + " ".join(parts) if parts else ""
+
+
 def main():
     manual_channels = load_manual_channels()
 
@@ -619,11 +675,12 @@ def main():
         group = ch["group"]
         name = ch["name"]
         url = ch["url"]
+        catchup_str = format_catchup_attrs(ch.get("catchup_attrs", {}))
 
         if logo:
-            extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}",{name}'
+            extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" tvg-logo="{logo}" group-title="{group}"{catchup_str},{name}'
         else:
-            extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" group-title="{group}",{name}'
+            extinf = f'#EXTINF:-1 tvg-id="{tvg_id}" group-title="{group}"{catchup_str},{name}'
 
         entry_lines = [extinf]
         for opt in ch.get("vlc_opts", []):
