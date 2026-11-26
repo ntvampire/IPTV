@@ -3,5 +3,6 @@
 # Порядок строк определяет приоритет: первый плейлист имеет наивысший приоритет, последующие используются как резервные источники потоков.
 # Строки, начинающиеся с #, игнорируются (комментарии).
 
-IPTVru | https://smolnp.github.io/IPTVru/IPTVstable.m3u8
+# Отключён: источник возвращает 404 (GitHub Pages удалён)
+# IPTVru | https://smolnp.github.io/IPTVru/IPTVstable.m3u8
 LoganetX | https://loganettv.github.io/playlists/all.m3u

@@ -1,10 +1,14 @@
 import gzip
-import io
+import ipaddress
 import json
 import os
 import re
+import socket
+import threading
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from urllib.parse import urljoin, urlparse
+import defusedxml.ElementTree as DefusedET
 import requests
 
 INPUT_CHANNELS_FILE = "input_channels.txt"
@@ -16,10 +20,17 @@ LOGOS_DIR = "logos"
 
 # Upstream EPG sources in order of priority
 PRIMARY_EPG_URL = "https://iptvx.one/epg/epg.xml.gz"
-SECONDARY_EPG_URL = "http://epg.one/epg2.xml.gz"
+SECONDARY_EPG_URL = "https://epg.one/epg2.xml.gz"
+
+# Safety and resource limits
+MAX_M3U_BYTES = 10 * 1024 * 1024      # 10 MB max for external M3U playlists
+MAX_EPG_GZ_BYTES = 100 * 1024 * 1024  # 100 MB max for compressed XMLTV download
+MAX_EPG_XML_BYTES = 512 * 1024 * 1024 # 512 MB max uncompressed XML stream
+MAX_REDIRECTS = 5
+ALLOWED_EXTHTTP_HEADERS = {"user-agent", "referer", "origin"}
 
 # GitHub Pages base URL configuration
-GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY", "ntvampire/iptv")
+GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY", "ntvampire/IPTV")
 REPO_OWNER, REPO_NAME = (
     GITHUB_REPOSITORY.split("/")
     if "/" in GITHUB_REPOSITORY
@@ -152,9 +163,23 @@ GROUP_NORMALIZATION = {
 }
 
 
+SHORT_IGNORED_TOKENS = {"эро", "sex", "xxx", "бст", "лдпр", "тест"}
+_SHORT_IGNORED_PATTERNS = [
+    re.compile(rf"(?:^|[^\w]){re.escape(tok)}(?:$|[^\w])", re.IGNORECASE)
+    for tok in SHORT_IGNORED_TOKENS
+]
+
+
 def is_blacklisted(channel_name):
+    """Check if channel name matches blacklisted phrases or standalone short tokens."""
     clean = channel_name.strip().lower()
-    return any(ignored in clean for ignored in IGNORED_CHANNEL_NAMES)
+    if any(pat.search(clean) for pat in _SHORT_IGNORED_PATTERNS):
+        return True
+    return any(
+        ignored in clean
+        for ignored in IGNORED_CHANNEL_NAMES
+        if ignored not in SHORT_IGNORED_TOKENS
+    )
 
 
 def normalize_group(group_title):
@@ -170,6 +195,133 @@ def normalize_group(group_title):
 
 
 _CACHED_LOCAL_LOGOS = None
+_THREAD_LOCAL = threading.local()
+
+
+def _get_session():
+    """Return a thread-local requests.Session for connection pooling."""
+    if not hasattr(_THREAD_LOCAL, "session"):
+        _THREAD_LOCAL.session = requests.Session()
+    return _THREAD_LOCAL.session
+
+
+def is_safe_public_url(url):
+    """Validate that URL uses http/https and resolves only to global public IP addresses."""
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False
+
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+
+    hostname = parsed.hostname
+    try:
+        addr_info = socket.getaddrinfo(hostname, None)
+    except OSError:
+        return False
+
+    if not addr_info:
+        return False
+
+    for info in addr_info:
+        ip_str = info[4][0].split("%", 1)[0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+            if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+                ip = ip.ipv4_mapped
+        except ValueError:
+            return False
+
+        if (
+            not ip.is_global
+            or ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        ):
+            return False
+
+    return True
+
+
+def _safe_request(method, url, headers=None, timeout=4, stream=False):
+    """Execute HTTP request with SSRF validation on initial URL and every redirect hop."""
+    session = _get_session()
+    current_url = url
+    req_method = method
+
+    for _ in range(MAX_REDIRECTS + 1):
+        if not is_safe_public_url(current_url):
+            return None
+
+        res = session.request(
+            req_method,
+            current_url,
+            headers=headers,
+            timeout=timeout,
+            allow_redirects=False,
+            stream=stream,
+        )
+        if res.status_code in (301, 302, 303, 307, 308):
+            location = res.headers.get("Location")
+            res.close()
+            if not location:
+                return None
+            current_url = urljoin(current_url, location)
+            if res.status_code == 303 and req_method == "HEAD":
+                req_method = "GET"
+            continue
+        return res
+
+    return None
+
+
+def _extract_stream_headers(vlc_opts, http_opts=None):
+    """Extract sanitized HTTP headers dict from #EXTVLCOPT and #EXTHTTP directives."""
+    headers_dict = {}
+    extra_vlc_opts = []
+
+    for opt in vlc_opts or []:
+        clean_opt = opt.replace("\r", "").replace("\n", "").strip()
+        if "http-user-agent=" in clean_opt:
+            val = clean_opt.split("http-user-agent=", 1)[1].strip()
+            if val:
+                headers_dict["User-Agent"] = val
+        elif "http-referrer=" in clean_opt:
+            val = clean_opt.split("http-referrer=", 1)[1].strip()
+            if val:
+                headers_dict["Referer"] = val
+        elif "http-origin=" in clean_opt:
+            val = clean_opt.split("http-origin=", 1)[1].strip()
+            if val:
+                headers_dict["Origin"] = val
+        elif clean_opt:
+            extra_vlc_opts.append(clean_opt)
+
+    for opt in http_opts or []:
+        clean_opt = opt.replace("\r", "").replace("\n", "").strip()
+        if not clean_opt.startswith("#EXTHTTP:"):
+            continue
+        try:
+            payload = json.loads(clean_opt.split("#EXTHTTP:", 1)[1].strip())
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        for k, v in payload.items():
+            if not isinstance(k, str) or not isinstance(v, (str, int, float)):
+                continue
+            k_lower = k.strip().lower()
+            if k_lower in ALLOWED_EXTHTTP_HEADERS:
+                canonical = {"user-agent": "User-Agent", "referer": "Referer", "origin": "Origin"}[k_lower]
+                clean_val = str(v).replace("\r", "").replace("\n", "").strip()
+                if clean_val:
+                    headers_dict[canonical] = clean_val
+
+    return headers_dict, extra_vlc_opts
 
 
 def get_local_logo_files():
@@ -184,43 +336,72 @@ def get_local_logo_files():
     return _CACHED_LOCAL_LOGOS
 
 
+def _is_html_content_type(res):
+    ctype = (res.headers.get("Content-Type") or "").lower()
+    return "text/html" in ctype or "application/xhtml" in ctype
+
+
+def _is_valid_stream_sample(sample, url):
+    stripped = sample.lstrip()[:32].lower()
+    if stripped.startswith((b"<!doctype", b"<html")):
+        return False
+    if ".m3u8" in urlparse(url).path.lower() and b"#EXTM3U" not in sample.upper():
+        return False
+    return True
+
+
 def check_stream(channel, timeout=4):
+    """Probe primary and backup stream URLs safely and select the first live stream."""
     urls_to_test = [channel["url"]] + channel.get("backup_urls", [])
     url_vlc_opts = channel.get("url_vlc_opts", {})
     url_http_opts = channel.get("url_http_opts", {})
     url_catchup_attrs = channel.get("url_catchup_attrs", {})
+    url_audio_track = channel.get("url_audio_track", {})
+
     for u in urls_to_test:
         opts = url_vlc_opts.get(u, channel.get("vlc_opts", []))
         h_opts = url_http_opts.get(u, channel.get("http_opts", []))
         c_attrs = url_catchup_attrs.get(u, channel.get("catchup_attrs", {}))
+        a_track = url_audio_track.get(u, channel.get("audio_track", ""))
+
         req_headers = dict(HEADERS)
-        for opt in opts:
-            if "http-user-agent=" in opt:
-                req_headers["User-Agent"] = opt.split("http-user-agent=", 1)[1].strip()
-            elif "http-referrer=" in opt:
-                req_headers["Referer"] = opt.split("http-referrer=", 1)[1].strip()
-        for opt in h_opts:
-            if opt.startswith("#EXTHTTP:"):
-                try:
-                    h_json = json.loads(opt.split("#EXTHTTP:", 1)[1].strip())
-                    req_headers.update(h_json)
-                except Exception:
-                    pass
+        stream_headers, _ = _extract_stream_headers(opts, h_opts)
+        req_headers.update(stream_headers)
+
         try:
-            res = requests.head(u, headers=req_headers, timeout=timeout, allow_redirects=True)
-            if res.status_code in (200, 302):
-                channel["url"] = u
-                channel["vlc_opts"] = opts
-                channel["http_opts"] = h_opts
-                channel["catchup_attrs"] = c_attrs
-                return channel
-            with requests.get(u, headers=req_headers, timeout=timeout, stream=True) as res:
-                if res.status_code in (200, 206):
-                    channel["url"] = u
-                    channel["vlc_opts"] = opts
-                    channel["http_opts"] = h_opts
-                    channel["catchup_attrs"] = c_attrs
-                    return channel
+            res = _safe_request("HEAD", u, headers=req_headers, timeout=timeout)
+            if res is not None:
+                try:
+                    if res.status_code == 200 and not _is_html_content_type(res):
+                        channel["url"] = u
+                        channel["vlc_opts"] = opts
+                        channel["http_opts"] = h_opts
+                        channel["catchup_attrs"] = c_attrs
+                        channel["audio_track"] = a_track
+                        return channel
+                finally:
+                    res.close()
+
+            res = _safe_request(
+                "GET", u, headers=req_headers, timeout=timeout, stream=True
+            )
+            if res is not None:
+                try:
+                    if res.status_code in (200, 206) and not _is_html_content_type(res):
+                        sample = b""
+                        for chunk in res.iter_content(chunk_size=512):
+                            if chunk:
+                                sample = chunk[:512]
+                                break
+                        if _is_valid_stream_sample(sample, u):
+                            channel["url"] = u
+                            channel["vlc_opts"] = opts
+                            channel["http_opts"] = h_opts
+                            channel["catchup_attrs"] = c_attrs
+                            channel["audio_track"] = a_track
+                            return channel
+                finally:
+                    res.close()
         except Exception:
             pass
     return None
@@ -296,15 +477,65 @@ def load_manual_channels():
     return channels
 
 
+def split_extinf_meta(extinf_line):
+    """Split '#EXTINF:attrs,Channel Name' at the first comma outside quotes."""
+    in_quote = None
+    for idx, ch in enumerate(extinf_line):
+        if ch in ('"', "'"):
+            if in_quote is None:
+                in_quote = ch
+            elif in_quote == ch:
+                in_quote = None
+        elif ch == "," and in_quote is None:
+            return extinf_line[:idx], extinf_line[idx + 1 :].strip()
+    return extinf_line, "Unknown"
+
+
+def sanitize_m3u_attr(value):
+    """Sanitize attribute values to avoid broken quotes or injected newlines in #EXTINF."""
+    return str(value).replace("\r", " ").replace("\n", " ").replace('"', "'").strip()
+
+
+def _fetch_m3u_text(source_url):
+    """Download an external M3U playlist safely within MAX_M3U_BYTES and decode as UTF-8."""
+    res = _safe_request("GET", source_url, headers=HEADERS, timeout=15, stream=True)
+    if res is None:
+        return None
+    try:
+        if res.status_code != 200:
+            return None
+        chunks = []
+        total = 0
+        for chunk in res.iter_content(chunk_size=65536):
+            if not chunk:
+                continue
+            total += len(chunk)
+            if total > MAX_M3U_BYTES:
+                print(f"[-] Playlist {source_url} exceeds {MAX_M3U_BYTES} byte limit, skipping.")
+                return None
+            chunks.append(chunk)
+        raw_bytes = b"".join(chunks)
+        ctype = (res.headers.get("Content-Type") or "").lower()
+        if "charset=" in ctype and res.encoding:
+            return raw_bytes.decode(res.encoding, errors="replace")
+        try:
+            return raw_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            return raw_bytes.decode("cp1251", errors="replace")
+    finally:
+        res.close()
+
+
 def parse_m3u_stream(source_url, source_name):
+    """Fetch and parse channels, headers, and catchup attributes from an external M3U playlist."""
     channels = []
     print(f"[*] Fetching external playlist: {source_name} ...")
     try:
-        res = requests.get(source_url, headers=HEADERS, timeout=15)
-        if res.status_code != 200:
+        text = _fetch_m3u_text(source_url)
+        if not text:
             return channels
 
-        lines = res.text.splitlines()
+        lines = text.splitlines()
         current_meta = None
         current_vlc_opts = []
         current_http_opts = []
@@ -318,17 +549,14 @@ def parse_m3u_stream(source_url, source_name):
                 current_vlc_opts = []
                 current_http_opts = []
             elif line.startswith("#EXTVLCOPT:"):
-                current_vlc_opts.append(line)
+                current_vlc_opts.append(line.replace("\r", "").replace("\n", ""))
             elif line.startswith("#EXTHTTP:"):
-                current_http_opts.append(line)
+                current_http_opts.append(line.replace("\r", "").replace("\n", ""))
             elif (
-                line.startswith("http://") or line.startswith("https://")
+                urlparse(line).scheme in ("http", "https")
             ) and current_meta:
-                name = (
-                    current_meta.split(",", 1)[1].strip()
-                    if "," in current_meta
-                    else "Unknown"
-                )
+                attr_part, raw_name = split_extinf_meta(current_meta)
+                name = raw_name.replace("\r", " ").replace("\n", " ").strip() or "Unknown"
 
                 if is_blacklisted(name):
                     current_meta = None
@@ -337,7 +565,7 @@ def parse_m3u_stream(source_url, source_name):
                     continue
 
                 group_match = re.search(
-                    r'group-title="([^"]*)"', current_meta, re.IGNORECASE
+                    r'group-title="([^"]*)"', attr_part, re.IGNORECASE
                 )
                 raw_group = group_match.group(1).strip() if group_match else "Общие"
 
@@ -354,18 +582,20 @@ def parse_m3u_stream(source_url, source_name):
                     group = CHANNEL_GROUP_OVERRIDES[clean_name]
 
                 logo_match = re.search(
-                    r'tvg-logo="([^"]*)"', current_meta, re.IGNORECASE
+                    r'tvg-logo="([^"]*)"', attr_part, re.IGNORECASE
                 )
                 logo = logo_match.group(1).strip() if logo_match else ""
+                if logo and urlparse(logo).scheme not in ("http", "https"):
+                    logo = ""
 
                 tvg_id_match = re.search(
-                    r'tvg-id="([^"]*)"', current_meta, re.IGNORECASE
+                    r'tvg-id="([^"]*)"', attr_part, re.IGNORECASE
                 )
                 tvg_id = tvg_id_match.group(1).strip() if tvg_id_match else name
 
                 # Extract audio-track
                 audio_track_match = re.search(
-                    r'audio-track="([^"]*)"', current_meta, re.IGNORECASE
+                    r'audio-track="([^"]*)"', attr_part, re.IGNORECASE
                 )
                 audio_track = (
                     audio_track_match.group(1).strip() if audio_track_match else ""
@@ -375,7 +605,7 @@ def parse_m3u_stream(source_url, source_name):
                 catchup_attrs = {}
                 for m in re.finditer(
                     r'([a-zA-Z0-9_\-]+)=(?:"([^"]*)"|\'([^\']*)\'|([^\s,]+))',
-                    current_meta,
+                    attr_part,
                 ):
                     attr_name = m.group(1).lower()
                     attr_val = m.group(2) or m.group(3) or m.group(4) or ""
@@ -450,6 +680,7 @@ def merge_external_playlists(playlist_sources):
                 merged[key]["url_catchup_attrs"] = {
                     ch["url"]: ch.get("catchup_attrs", {})
                 }
+                merged[key]["url_audio_track"] = {ch["url"]: ch.get("audio_track", "")}
             else:
                 backup_url = ch.get("url")
                 if (
@@ -458,26 +689,17 @@ def merge_external_playlists(playlist_sources):
                     and backup_url not in merged[key]["backup_urls"]
                 ):
                     merged[key]["backup_urls"].append(backup_url)
-                    if "url_vlc_opts" not in merged[key]:
-                        merged[key]["url_vlc_opts"] = {
-                            merged[key]["url"]: merged[key].get("vlc_opts", [])
-                        }
-                    merged[key]["url_vlc_opts"][backup_url] = ch.get("vlc_opts", [])
-                    if "url_http_opts" not in merged[key]:
-                        merged[key]["url_http_opts"] = {
-                            merged[key]["url"]: merged[key].get("http_opts", [])
-                        }
-                    merged[key]["url_http_opts"][backup_url] = ch.get("http_opts", [])
-                    if "url_catchup_attrs" not in merged[key]:
-                        merged[key]["url_catchup_attrs"] = {
-                            merged[key]["url"]: merged[key].get("catchup_attrs", {})
-                        }
-                    merged[key]["url_catchup_attrs"][backup_url] = ch.get(
-                        "catchup_attrs", {}
-                    )
-                # Inherit audio_track if primary channel was missing it
-                if not merged[key].get("audio_track") and ch.get("audio_track"):
-                    merged[key]["audio_track"] = ch["audio_track"]
+                    for map_key, field_key, default_val in (
+                        ("url_vlc_opts", "vlc_opts", []),
+                        ("url_http_opts", "http_opts", []),
+                        ("url_catchup_attrs", "catchup_attrs", {}),
+                        ("url_audio_track", "audio_track", ""),
+                    ):
+                        if map_key not in merged[key]:
+                            merged[key][map_key] = {
+                                merged[key]["url"]: merged[key].get(field_key, default_val)
+                            }
+                        merged[key][map_key][backup_url] = ch.get(field_key, default_val)
 
     return list(merged.values())
 
@@ -501,49 +723,88 @@ def filter_alive_channels(channels, max_workers=30):
     return alive_channels
 
 
+class _BoundedStreamReader:
+    """File-like wrapper enforcing a strict limit on decompressed bytes read."""
+
+    def __init__(self, raw_stream, max_bytes):
+        self._stream = raw_stream
+        self._max_bytes = max_bytes
+        self._bytes_read = 0
+
+    def read(self, size=-1):
+        data = self._stream.read(size)
+        self._bytes_read += len(data)
+        if self._bytes_read > self._max_bytes:
+            raise ValueError(
+                f"Decompressed XML stream exceeds {self._max_bytes} byte limit"
+            )
+        return data
+
+
 def _create_empty_epg():
-    """Fallback generator to guarantee epg.xml.gz exists."""
+    """Fallback generator to guarantee epg.xml.gz exists when no prior file exists."""
     root = ET.Element("tv")
     tree = ET.ElementTree(root)
-    with gzip.open(OUTPUT_EPG_FILE, "wb") as f:
+    tmp_path = f"{OUTPUT_EPG_FILE}.tmp"
+    with gzip.open(tmp_path, "wb") as f:
         tree.write(f, encoding="utf-8", xml_declaration=True)
+    os.replace(tmp_path, OUTPUT_EPG_FILE)
 
 
 def _download_stream(url, target_path):
-    """Downloads a gzipped stream to target file path."""
-    with requests.get(url, headers=HEADERS, stream=True, timeout=120) as r:
-        if r.status_code != 200:
-            print(f"[-] Failed to fetch {url}, HTTP {r.status_code}")
+    """Downloads a gzipped stream safely within MAX_EPG_GZ_BYTES to target file path."""
+    res = _safe_request("GET", url, headers=HEADERS, timeout=120, stream=True)
+    if res is None:
+        print(f"[-] Blocked or unreachable EPG URL: {url}")
+        return False
+    try:
+        if res.status_code != 200:
+            print(f"[-] Failed to fetch {url}, HTTP {res.status_code}")
             return False
+        total = 0
         with open(target_path, "wb") as f:
-            for chunk in r.iter_content(chunk_size=1024 * 512):
-                if chunk:
-                    f.write(chunk)
-    return True
+            for chunk in res.iter_content(chunk_size=1024 * 512):
+                if not chunk:
+                    continue
+                total += len(chunk)
+                if total > MAX_EPG_GZ_BYTES:
+                    print(f"[-] EPG stream {url} exceeds {MAX_EPG_GZ_BYTES} byte limit.")
+                    return False
+                f.write(chunk)
+        return True
+    finally:
+        res.close()
+
+
+def _normalize_epg_name(name):
+    """Return (raw_lower, clean_no_archive, no_quality_suffix) forms for channel matching."""
+    raw = name.strip().lower()
+    clean = re.sub(r"\s*\(архив\)\s*", "", raw).strip()
+    no_hd = re.sub(r"\s+(hd|fhd|4k|sd)$", "", clean).strip()
+    return raw, clean, no_hd
 
 
 def generate_custom_epg(channels):
     """Download and merge multiple upstream EPGs with iptvx.one priority.
     Complies strictly with XMLTV DTD: all <channel> elements precede <programme> elements.
     Secondary EPG programmes are only used as fallback if Primary has no programmes for the channel.
+    Auto-resolves missing tvg-id and fallback tvg-logo icons from matched EPG entries.
     """
     target_ids = set()
     for ch in channels:
         if ch.get("tvg_id"):
             target_ids.add(ch["tvg_id"].strip().lower())
         if ch.get("name"):
-            name_raw = ch["name"].strip().lower()
-            target_ids.add(name_raw)
-            name_clean = re.sub(r"\s*\(архив\)\s*", "", name_raw).strip()
-            target_ids.add(name_clean)
-            name_no_hd = re.sub(r"\s+(hd|fhd|4k|sd)$", "", name_clean).strip()
-            target_ids.add(name_no_hd)
+            target_ids.update(_normalize_epg_name(ch["name"]))
 
     channel_elements = []
     programme_elements = []
     seen_channels = set()
-    channels_with_programmes = set()
-    epg_name_to_id = {}
+    primary_channels_with_programmes = set()
+    secondary_channels_with_programmes = set()
+    epg_exact_name_to_id = {}
+    epg_norm_name_to_id = {}
+    epg_id_to_icon = {}
 
     sources = [
         ("iptvx.one (Primary)", PRIMARY_EPG_URL, True),
@@ -565,7 +826,8 @@ def generate_custom_epg(channels):
 
         try:
             with gzip.open(temp_gz, "rb") as gz_in:
-                context = ET.iterparse(gz_in, events=("start", "end"))
+                bounded_in = _BoundedStreamReader(gz_in, MAX_EPG_XML_BYTES)
+                context = DefusedET.iterparse(bounded_in, events=("start", "end"))
                 _, root = next(context)
                 for event, elem in context:
                     if event != "end":
@@ -575,13 +837,14 @@ def generate_custom_epg(channels):
                         ch_id = elem.get("id", "").strip()
                         ch_id_lower = ch_id.lower()
                         display_name_elem = elem.find("display-name")
-                        display_name = (
-                            display_name_elem.text.strip().lower()
+                        display_text = (
+                            display_name_elem.text
                             if display_name_elem is not None and display_name_elem.text
                             else ""
                         )
-                        disp_clean = re.sub(r"\s*\(архив\)\s*", "", display_name).strip()
-                        disp_no_hd = re.sub(r"\s+(hd|fhd|4k|sd)$", "", disp_clean).strip()
+                        display_name, disp_clean, disp_no_hd = _normalize_epg_name(
+                            display_text
+                        )
 
                         if (
                             ch_id_lower in target_ids
@@ -593,12 +856,18 @@ def generate_custom_epg(channels):
                                 channel_elements.append(elem)
                                 seen_channels.add(ch_id_lower)
                                 kept_ch += 1
-                                if display_name and display_name not in epg_name_to_id:
-                                    epg_name_to_id[display_name] = ch_id
-                                if disp_clean and disp_clean not in epg_name_to_id:
-                                    epg_name_to_id[disp_clean] = ch_id
-                                if disp_no_hd and disp_no_hd not in epg_name_to_id:
-                                    epg_name_to_id[disp_no_hd] = ch_id
+                                if display_name and display_name not in epg_exact_name_to_id:
+                                    epg_exact_name_to_id[display_name] = ch_id
+                                if disp_clean and disp_clean not in epg_exact_name_to_id:
+                                    epg_exact_name_to_id[disp_clean] = ch_id
+                                if disp_no_hd and disp_no_hd not in epg_norm_name_to_id:
+                                    epg_norm_name_to_id[disp_no_hd] = ch_id
+
+                                icon_elem = elem.find("icon")
+                                if icon_elem is not None:
+                                    icon_src = (icon_elem.get("src") or "").strip()
+                                    if urlparse(icon_src).scheme in ("http", "https"):
+                                        epg_id_to_icon[ch_id_lower] = icon_src
                             else:
                                 elem.clear()
                         else:
@@ -611,15 +880,14 @@ def generate_custom_epg(channels):
                         if prog_ch_lower in seen_channels or prog_ch_lower in target_ids:
                             if is_primary:
                                 programme_elements.append(elem)
-                                channels_with_programmes.add(prog_ch_lower)
+                                primary_channels_with_programmes.add(prog_ch_lower)
+                                kept_prog += 1
+                            elif prog_ch_lower not in primary_channels_with_programmes:
+                                programme_elements.append(elem)
+                                secondary_channels_with_programmes.add(prog_ch_lower)
                                 kept_prog += 1
                             else:
-                                # Fallback: only include programmes if Primary had none for this channel
-                                if prog_ch_lower not in channels_with_programmes:
-                                    programme_elements.append(elem)
-                                    kept_prog += 1
-                                else:
-                                    elem.clear()
+                                elem.clear()
                         else:
                             elem.clear()
 
@@ -635,30 +903,41 @@ def generate_custom_epg(channels):
             if os.path.exists(temp_gz):
                 os.remove(temp_gz)
 
-    # Auto-resolve canonical tvg_id for channels without upstream IDs
+    channels_with_programmes = (
+        primary_channels_with_programmes | secondary_channels_with_programmes
+    )
+
+    # Auto-resolve canonical tvg_id (exact match priority over HD-stripped) and fallback icon
     resolved_count = 0
+    icon_count = 0
     for ch in channels:
         current_id = (ch.get("tvg_id") or "").strip()
-        current_id_lower = current_id.lower()
-        if current_id_lower in channels_with_programmes:
-            continue
-
-        name_raw = ch["name"].strip().lower()
-        name_clean = re.sub(r"\s*\(архив\)\s*", "", name_raw).strip()
-        name_no_hd = re.sub(r"\s+(hd|fhd|4k|sd)$", "", name_clean).strip()
-
-        for cand in (name_raw, name_clean, name_no_hd):
-            if cand in epg_name_to_id:
-                candidate_id = epg_name_to_id[cand]
-                if candidate_id.lower() in channels_with_programmes:
+        if current_id.lower() not in channels_with_programmes:
+            name_raw, name_clean, name_no_hd = _normalize_epg_name(ch["name"])
+            candidates = [
+                epg_exact_name_to_id.get(name_raw),
+                epg_exact_name_to_id.get(name_clean),
+                epg_norm_name_to_id.get(name_no_hd),
+            ]
+            for candidate_id in candidates:
+                if candidate_id and candidate_id.lower() in channels_with_programmes:
                     ch["tvg_id"] = candidate_id
                     resolved_count += 1
                     break
+
+        if not ch.get("logo"):
+            resolved_lower = (ch.get("tvg_id") or "").strip().lower()
+            epg_icon = epg_id_to_icon.get(resolved_lower)
+            if epg_icon:
+                ch["logo"] = epg_icon
+                icon_count += 1
 
     if resolved_count:
         print(
             f"[+] Auto-resolved canonical tvg-id for {resolved_count} channels from EPG."
         )
+    if icon_count:
+        print(f"[+] Populated fallback EPG logos for {icon_count} channels.")
 
     if channel_elements or programme_elements:
         new_root = ET.Element("tv", {"generator-info-name": "Custom Merged IPTV EPG"})
@@ -669,16 +948,23 @@ def generate_custom_epg(channels):
             new_root.append(prog_elem)
 
         tree = ET.ElementTree(new_root)
-        with gzip.open(OUTPUT_EPG_FILE, "wb") as f_out:
+        tmp_epg = f"{OUTPUT_EPG_FILE}.tmp"
+        with gzip.open(tmp_epg, "wb") as f_out:
             tree.write(f_out, encoding="utf-8", xml_declaration=True)
+        os.replace(tmp_epg, OUTPUT_EPG_FILE)
         print(
             f"[+] Successfully generated merged {OUTPUT_EPG_FILE} ({os.path.getsize(OUTPUT_EPG_FILE) // 1024} KB)"
+        )
+    elif os.path.exists(OUTPUT_EPG_FILE) and os.path.getsize(OUTPUT_EPG_FILE) > 100:
+        print(
+            f"[!] Warning: upstream EPGs produced no data, keeping existing {OUTPUT_EPG_FILE}."
         )
     else:
         _create_empty_epg()
 
 
 def format_catchup_attrs(catchup_attrs):
+    """Format sanitized catchup/archive attributes in canonical order."""
     if not catchup_attrs:
         return ""
     preferred_order = [
@@ -695,39 +981,37 @@ def format_catchup_attrs(catchup_attrs):
     seen = set()
     for key in preferred_order:
         if key in catchup_attrs:
-            parts.append(f'{key}="{catchup_attrs[key]}"')
+            clean_key = re.sub(r"[^a-zA-Z0-9_\-]", "", key)
+            parts.append(f'{clean_key}="{sanitize_m3u_attr(catchup_attrs[key])}"')
             seen.add(key)
     for key, val in catchup_attrs.items():
         if key not in seen:
-            parts.append(f'{key}="{val}"')
+            clean_key = re.sub(r"[^a-zA-Z0-9_\-]", "", key)
+            if clean_key:
+                parts.append(f'{clean_key}="{sanitize_m3u_attr(val)}"')
     return " " + " ".join(parts) if parts else ""
 
 
 def format_channel_headers(vlc_opts, http_opts=None):
-    """
-    Returns unified header directive lines for a stream.
-    Emits both #EXTVLCOPT and #EXTHTTP for maximum compatibility across players:
-    - VLC / Televizo use #EXTVLCOPT
-    - Pult (iOS/Apple TV/AVPlayer) / OTT Navigator use #EXTHTTP
-    """
+    """Return unified #EXTVLCOPT and #EXTHTTP header lines for cross-player compatibility."""
+    headers_dict, extra_vlc_opts = _extract_stream_headers(vlc_opts, http_opts)
     lines = []
-    headers_dict = {}
 
-    for opt in (vlc_opts or []):
-        lines.append(opt)
-        if "http-user-agent=" in opt:
-            headers_dict["User-Agent"] = opt.split("http-user-agent=", 1)[1].strip()
-        elif "http-referrer=" in opt:
-            headers_dict["Referer"] = opt.split("http-referrer=", 1)[1].strip()
+    vlc_key_map = {
+        "User-Agent": "http-user-agent",
+        "Referer": "http-referrer",
+        "Origin": "http-origin",
+    }
+    for header_name, vlc_key in vlc_key_map.items():
+        if header_name in headers_dict:
+            lines.append(f"#EXTVLCOPT:{vlc_key}={headers_dict[header_name]}")
 
-    if http_opts:
-        for opt in http_opts:
-            if opt not in lines:
-                lines.append(opt)
-    elif headers_dict:
-        http_line = f"#EXTHTTP:{json.dumps(headers_dict, ensure_ascii=False)}"
-        if http_line not in lines:
-            lines.append(http_line)
+    for opt in extra_vlc_opts:
+        if opt not in lines:
+            lines.append(opt)
+
+    if headers_dict:
+        lines.append(f"#EXTHTTP:{json.dumps(headers_dict, ensure_ascii=False)}")
 
     return lines
 
@@ -783,13 +1067,13 @@ def main():
 
     content = [f'#EXTM3U url-tvg="{CUSTOM_EPG_URL}" x-tvg-url="{CUSTOM_EPG_URL}"']
     for ch in final_list:
-        tvg_id = ch.get("tvg_id") or ch["name"]
-        tvg_name = ch["name"]
-        logo = ch.get("logo", "")
-        group = ch["group"]
-        name = ch["name"]
+        tvg_id = sanitize_m3u_attr(ch.get("tvg_id") or ch["name"])
+        tvg_name = sanitize_m3u_attr(ch["name"])
+        logo = sanitize_m3u_attr(ch.get("logo", ""))
+        group = sanitize_m3u_attr(ch["group"])
+        name = ch["name"].replace("\r", " ").replace("\n", " ").strip()
         url = ch["url"]
-        audio_track = ch.get("audio_track", "")
+        audio_track = sanitize_m3u_attr(ch.get("audio_track", ""))
         audio_track_str = f' audio-track="{audio_track}"' if audio_track else ""
         catchup_str = format_catchup_attrs(ch.get("catchup_attrs", {}))
 
@@ -807,8 +1091,10 @@ def main():
 
         content.append("\n".join(entry_lines))
 
-    with open(OUTPUT_FILE, "w", encoding="utf-8") as out:
+    tmp_output = f"{OUTPUT_FILE}.tmp"
+    with open(tmp_output, "w", encoding="utf-8") as out:
         out.write("\n\n".join(content) + "\n")
+    os.replace(tmp_output, OUTPUT_FILE)
 
     print(f"\n[+] Generation completed successfully!")
     print(f"    - Playlist URL : https://{REPO_OWNER}.github.io/{REPO_NAME}/{OUTPUT_FILE}")
